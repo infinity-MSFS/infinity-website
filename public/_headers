@@ -1,0 +1,15 @@
+# Trunk builds with filehash = true, so every asset filename changes when its
+# contents do. Those are safe to pin forever; the shell must never be pinned.
+/*.wasm
+  Cache-Control: public, max-age=31536000, immutable
+/*.js
+  Cache-Control: public, max-age=31536000, immutable
+/*.css
+  Cache-Control: public, max-age=31536000, immutable
+
+/index.html
+  Cache-Control: no-cache
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

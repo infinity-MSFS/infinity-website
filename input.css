@@ -1,0 +1,31 @@
+@import "../infinity-ui-wasm/style/infinity-ui.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --ac-200: 167 243 208;
+    --ac-300: 110 231 183;
+    --ac-400: 52 211 153;
+    --ac-500: 16 185 129;
+    --ac-600: 5 150 105;
+    --ac-700: 4 120 87;
+    --ac-900: 6 78 59;
+
+    overflow-x: hidden;
+    font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    font-weight: 400;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    width: 100vw;
+    height: 100vh;
+    background-color: #000;
+}

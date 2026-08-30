@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <link rel="icon" type="image/svg+xml" href="/infinity.svg" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Infinity MSFS</title>
+        <meta
+            name="description"
+            content="Infinity is the distribution platform and aircraft manager from Aero Dynamics for Microsoft Flight Simulator 2024."
+        />
+        <base href="/" />
+
+        <link data-trunk rel="tailwind-css" href="input.css" />
+        <link
+            data-trunk
+            rel="rust"
+            data-wasm-opt="z"
+            data-wasm-opt-params="--enable-bulk-memory-opt --enable-nontrapping-float-to-int"
+        />
+        <link data-trunk rel="copy-dir" href="public" data-target-path="." />
+    </head>
+    <body></body>
+</html>

@@ -1,0 +1,16 @@
+[build]
+target = "index.html"
+dist = "dist"
+filehash = true
+
+[tools]
+tailwindcss = "3.4.19"
+wasm_opt = "version_132"
+
+[watch]
+watch = ["index.html", "src", "input.css", "tailwind.config.js", "public", "../infinity-ui-wasm/crates/infinity-ui/src", "../infinity-ui-wasm/style"]
+# ignore = ["dist", "target"]
+
+[serve]
+port = 3035
+open = false

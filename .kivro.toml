@@ -1,0 +1,16 @@
+[meta]
+format = 1
+
+[project]
+name = "infinity-website"
+
+[environment]
+default = "dev"
+
+[variables]
+CDN_WORKER_URL = { required = true }
+USER_API_URL = { required = true }
+SUPPORT_API_URL = { required = true }
+AUTH0_DOMAIN = { required = true }
+AUTH0_CLIENT_ID = { required = true }
+AUTH0_AUDIENCE = { required = true }

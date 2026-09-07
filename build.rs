@@ -1,8 +1,7 @@
-const KEYS: [(&str, bool); 6] = [
+const KEYS: [(&str, bool); 5] = [
     ("AUTH0_DOMAIN", true),
     ("AUTH0_CLIENT_ID", true),
     ("AUTH0_AUDIENCE", true),
-    ("USER_API_URL", true),
     ("SUPPORT_API_URL", true),
     ("CDN_WORKER_URL", false),
 ];

@@ -43,7 +43,13 @@ function Write-Ok($msg)   { Write-Host "    $msg" -ForegroundColor Green }
 
 Push-Location $Root
 try {
-    foreach ($tool in @("kivro", "trunk", "npx")) {
+    # npm ships a broken npx.ps1: it rebuilds its argument list by slicing
+    # InvocationName.Length characters off the raw command text, so "& npx --yes x"
+    # loses "& n" and npm tries to install a package literally named "px".
+    # npx.cmd forwards %* untouched.
+    $Npx = if ($env:OS -eq "Windows_NT") { "npx.cmd" } else { "npx" }
+
+    foreach ($tool in @("kivro", "trunk", $Npx)) {
         if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
             throw "$tool not found on PATH."
         }
@@ -92,7 +98,7 @@ try {
     Write-Ok "$((Get-ChildItem $Dist -Recurse -File).Count) files ready"
 
     Write-Step "Deploying to Cloudflare Pages ($ProjectName, branch: $Branch)"
-    & npx --yes wrangler@latest pages deploy $Dist `
+    & $Npx --yes wrangler@latest pages deploy $Dist `
         --project-name=$ProjectName `
         --branch=$Branch
     if ($LASTEXITCODE -ne 0) { throw "wrangler deploy failed." }

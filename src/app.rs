@@ -5,6 +5,7 @@ use leptos_router::hooks::use_location;
 use leptos_router::path;
 
 use crate::auth::{provide_auth, use_auth};
+use crate::background::{self, BackgroundPicker};
 use crate::brand::{GLOW_NAV, InfinityMark};
 use crate::nav;
 use crate::pages;
@@ -15,21 +16,34 @@ pub fn App() -> impl IntoView {
     let low_performance = webgl_support().is_low_performance();
     provide_auth();
     provide_remote_state();
+    let background = background::provide_background();
 
     view! {
         <Router>
             {if low_performance {
                 view! {
-                    <div class="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
-
-                    </div>
+                    <div
+                        class="min-h-screen"
+                        style=format!("background: {};", background::ramp_for(background::DEFAULT))
+                    ></div>
                 }
                     .into_any()
             } else {
                 view! {
-                    <BackgroundGradientAnimation>
-                        <Chrome/>
-                    </BackgroundGradientAnimation>
+                    // Re-reads the palette signal so the picker can swap
+                    // backgrounds without a rebuild.
+                    {move || {
+                        view! {
+                            <BackgroundGradientAnimation palette=background::palette_for(
+                                background.name.get(),
+                            )>
+                                <Chrome/>
+                            </BackgroundGradientAnimation>
+                        }
+                    }}
+                    <Show when=move || background.picker>
+                        <BackgroundPicker/>
+                    </Show>
                 }
                     .into_any()
             }}
@@ -69,6 +83,8 @@ fn Chrome() -> impl IntoView {
                        <Route path=path!("/docs/developer/:slug") view=pages::DeveloperDocs />
                        <Route path=path!("/user") view=pages::UserDashboard />
                        <Route path=path!("/beta") view=pages::BetaSignup />
+                       <Route path=path!("/beta/admin") view=pages::BetaAdmin />
+                       <Route path=path!("/beta/sign/:doc") view=pages::BetaSignDocument />
                        <Route path=path!("/purchase-success") view=pages::PurchaseSuccess />
                        <Route path=path!("/purchase-cancelled") view=pages::PurchaseCancelled />
                        <Route path=path!("/ata") view=pages::AtaDocuments />
@@ -96,10 +112,56 @@ fn SiteNav() -> impl IntoView {
                     <span class="hidden sm:inline">"Infinity"</span>
                 }
             })
-            actions=ViewFn::from(move || view! { <AccountControls /> })
-            mobile_actions=ViewFn::from(move || view! { <AccountControls inline=true /> })
+            actions=ViewFn::from(move || {
+                view! {
+                    <GithubLink />
+                    <AccountControls />
+                }
+            })
+            mobile_actions=ViewFn::from(move || {
+                view! {
+                    <GithubLink inline=true />
+                    <AccountControls inline=true />
+                }
+            })
         />
     }
+}
+
+/// Link out to the GitHub organisation: an icon in the desktop bar, a labelled
+/// row in the mobile panel.
+#[component]
+fn GithubLink(#[prop(optional)] inline: bool) -> impl IntoView {
+    if inline {
+        return view! {
+            <a
+                href=nav::GITHUB_ORG
+                target="_blank"
+                rel="noreferrer noopener"
+                class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-base font-medium text-slate-300 transition-colors hover:bg-white/[0.05] hover:text-white"
+            >
+                <Icon icon=icons::GITHUB class="h-4 w-4" />
+                "GitHub"
+                <Icon icon=icons::EXTERNAL_LINK class="ml-auto h-3.5 w-3.5 opacity-50" />
+            </a>
+        }
+            .into_any();
+    }
+
+    view! {
+        <Tooltip text="Our code on GitHub" placement=Placement::Bottom>
+            <a
+                href=nav::GITHUB_ORG
+                target="_blank"
+                rel="noreferrer noopener"
+                aria-label="Infinity on GitHub"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.06] hover:text-white"
+            >
+                <Icon icon=icons::GITHUB class="h-[18px] w-[18px]" />
+            </a>
+        </Tooltip>
+    }
+        .into_any()
 }
 
 #[component]

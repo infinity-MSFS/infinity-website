@@ -1,6 +1,10 @@
 /target
 /dist
 
+# Wrangler caches the Cloudflare account id and account name (an email
+# address) here. This repo is public.
+/.wrangler
+
 .env
 .env.*
 *.kivro

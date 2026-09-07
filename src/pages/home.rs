@@ -8,10 +8,12 @@ const HEADLINE: &str = "High-fidelity aircraft.";
 const HEADLINE_ACCENT: &str = "Effortless management.";
 const DESCRIPTION: &str = "Infinity is the distribution platform and aircraft manager from Aero Dynamics — shipping our premium add-ons alongside hand-picked freeware from the wider community. Engineered in Rust with a strict push for safe, reliable code across everything we build.";
 
-const CHIPS: &[(IconData, &str)] = &[
-    (icons::PLANE, "MSFS 2024"),
-    (icons::CPU, "Built in Rust"),
-    (icons::CODE_XML, "Open-Source SDK"),
+/// Icon, label, and an optional link the chip becomes.
+const CHIPS: &[(IconData, &str, Option<&str>)] = &[
+    (icons::PLANE, "MSFS 2024", None),
+    (icons::CPU, "Built in Rust", None),
+    (icons::CODE_XML, "Open-Source SDK", None),
+    (icons::GITHUB, "infinity-MSFS", Some(nav::GITHUB_ORG)),
 ];
 
 #[component]
@@ -104,14 +106,39 @@ pub fn Home() -> impl IntoView {
                 >
                     {CHIPS
                         .iter()
-                        .map(|(icon, label)| {
-                            view! {
-                                <span class="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-white/70 backdrop-blur-sm">
-                                    <span class="text-accent-300">
-                                        <Icon icon=*icon class="h-3.5 w-3.5" />
-                                    </span>
-                                    {*label}
+                        .map(|(icon, label, href)| {
+                            let inner = view! {
+                                <span class="text-accent-300">
+                                    <Icon icon=*icon class="h-3.5 w-3.5" />
                                 </span>
+                                {*label}
+                            };
+                            match href {
+                                Some(href) => {
+                                    view! {
+                                        <a
+                                            href=*href
+                                            target="_blank"
+                                            rel="noreferrer noopener"
+                                            class="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-white/70 backdrop-blur-sm transition-colors hover:border-accent-400/40 hover:bg-accent-500/10 hover:text-white"
+                                        >
+                                            {inner}
+                                            <Icon
+                                                icon=icons::ARROW_UP_RIGHT
+                                                class="h-3 w-3 opacity-60"
+                                            />
+                                        </a>
+                                    }
+                                        .into_any()
+                                }
+                                None => {
+                                    view! {
+                                        <span class="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-white/70 backdrop-blur-sm">
+                                            {inner}
+                                        </span>
+                                    }
+                                        .into_any()
+                                }
                             }
                         })
                         .collect_view()}

@@ -5,7 +5,7 @@ use leptos_router::hooks::use_location;
 use leptos_router::path;
 
 use crate::auth::{provide_auth, use_auth};
-use crate::background::{self, BackgroundPicker};
+use crate::background;
 use crate::brand::{COPYRIGHT_YEAR, GLOW_NAV, InfinityMark, PUBLISHER};
 use crate::nav;
 use crate::pages;
@@ -16,34 +16,21 @@ pub fn App() -> impl IntoView {
     let low_performance = webgl_support().is_low_performance();
     provide_auth();
     provide_remote_state();
-    let background = background::provide_background();
 
     view! {
         <Router>
             {if low_performance {
                 view! {
-                    <div
-                        class="min-h-screen"
-                        style=format!("background: {};", background::ramp_for(background::DEFAULT))
-                    ></div>
+                    <div class="min-h-screen" style=format!("background: {};", background::ramp())>
+                        <Chrome/>
+                    </div>
                 }
                     .into_any()
             } else {
                 view! {
-                    // Re-reads the palette signal so the picker can swap
-                    // backgrounds without a rebuild.
-                    {move || {
-                        view! {
-                            <BackgroundGradientAnimation palette=background::palette_for(
-                                background.name.get(),
-                            )>
-                                <Chrome/>
-                            </BackgroundGradientAnimation>
-                        }
-                    }}
-                    <Show when=move || background.picker>
-                        <BackgroundPicker/>
-                    </Show>
+                    <BackgroundGradientAnimation palette=background::PALETTE>
+                        <Chrome/>
+                    </BackgroundGradientAnimation>
                 }
                     .into_any()
             }}

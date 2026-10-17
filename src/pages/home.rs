@@ -35,7 +35,7 @@ pub fn Home() -> impl IntoView {
                 <Reveal y=16.0 duration=0.7 delay=0.05 class="mb-5 flex flex-col items-center">
                     <div class="flex items-start justify-center gap-3">
                         <InfinityMark class="h-14 w-14 md:h-16 md:w-16" glow=GLOW_HERO />
-                        <span class="bg-gradient-to-b from-white to-white/70 bg-clip-text text-5xl font-bold tracking-tight text-transparent md:text-6xl">
+                        <span class="bg-gradient-to-b from-white to-white/70 bg-clip-text pb-[0.15em] -mb-[0.15em] text-5xl font-bold tracking-tight text-transparent md:text-6xl">
                             "Infinity"
                         </span>
                     </div>

@@ -1,6 +1,7 @@
 use infinity_ui::prelude::*;
 
 use crate::auth::use_auth;
+use crate::manual::links::{SITE_MANUALS, manual_path};
 use crate::nav;
 
 const REPO_URL: &str = "https://github.com/infinity-MSFS/infinity-rs";
@@ -95,6 +96,42 @@ pub fn DocsLanding() -> impl IntoView {
                                 go.run(format!("{}/getting-started", nav::DEVELOPER_DOCS))
                             })
                         />
+                        // Web flight manuals are drafts, so unlike the ATA
+                        // tile there is no "coming soon" teaser: the tile
+                        // doesn't exist for anyone without the developer role.
+                        <Show when=move || staff.get()>
+                            {SITE_MANUALS
+                                .iter()
+                                .map(|manual| {
+                                    let aircraft = manual
+                                        .products
+                                        .iter()
+                                        .map(|p| p.aircraft)
+                                        .collect::<Vec<_>>()
+                                        .join(" / ");
+                                    let path = manual_path(manual.id);
+                                    view! {
+                                        <Tile
+                                            title="Flight Manual"
+                                            eyebrow="Developer preview"
+                                            tagline=format!(
+                                                "The {aircraft} flight manual, readable in the browser — systems, limitations and procedures for the whole family.",
+                                            )
+                                            icon=icons::BOOK_OPEN
+                                            flag=("Dev".to_string(), Tone::Dev)
+                                            bullets=vec![
+                                                "Limitations, normal, abnormal and emergency procedures"
+                                                    .to_string(),
+                                                "Full-text search and deep links to any section".to_string(),
+                                                "Draft — chapters are still being written".to_string(),
+                                            ]
+                                            cta="Open the manual"
+                                            on_click=Callback::new(move |()| go.run(path.clone()))
+                                        />
+                                    }
+                                })
+                                .collect_view()}
+                        </Show>
                     </div>
 
                     <footer class="mt-2 text-xs tracking-[0.18em] text-white/35 uppercase">

@@ -29,3 +29,33 @@ body {
     height: 100vh;
     background-color: #000;
 }
+
+/* Manual reader (src/manual). The sticky bar's height feeds the offsets the
+   sidebar, popovers and section jumps land at, so it lives in variables the
+   utilities read. A host sets --manual-top-offset to its own sticky header's
+   height. */
+.manual {
+    --manual-top: var(--manual-top-offset, 0px);
+    --manual-bar: 4rem;
+    --manual-landing: calc(var(--manual-top) + var(--manual-bar) + 1.25rem);
+    scroll-margin-top: var(--manual-top);
+}
+
+/* The aircraft buttons get their own row in the bar on phones. */
+.manual-aircraft {
+    --manual-bar: 7rem;
+}
+
+@media (min-width: 768px) {
+    .manual-aircraft {
+        --manual-bar: 4rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .manual *,
+    .manual *::before,
+    .manual *::after {
+        transition: none;
+    }
+}

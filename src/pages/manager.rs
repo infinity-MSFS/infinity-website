@@ -23,7 +23,7 @@ const FEATURES: &[(IconData, &str, &str, &str)] = &[
         icons::KEY_ROUND,
         "bg-blue-500/20",
         "text-blue-400",
-        "Seamless Activation",
+        "Seamless Setup",
     ),
     (
         icons::REFRESH_CW,

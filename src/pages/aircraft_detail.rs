@@ -3,8 +3,11 @@ use infinity_ui::{MediaGallery, MediaItem, MediaKind};
 use leptos::task::spawn_local;
 use leptos_router::hooks::use_params_map;
 
+use super::legal::{EulaDocument, LINK};
 use crate::api::{self, AircraftProduct};
 use crate::auth::use_auth;
+use crate::brand;
+use crate::manual;
 use crate::nav;
 use crate::state::use_catalog;
 
@@ -94,6 +97,10 @@ fn ProductDetail(product: AircraftProduct) -> impl IntoView {
     let auth = use_auth();
     let checkout_error = RwSignal::new(None::<String>);
     let checkout_pending = RwSignal::new(false);
+    // Gates the Purchase button. Its evidentiary value needs the worker to
+    // store the acknowledgement against the order — until it does, this is a
+    // disclosure control only.
+    let ack_policy = RwSignal::new(false);
 
     let entitlements = StoredValue::new_local(product.entitlements());
     let owned = Signal::derive(move || {
@@ -173,7 +180,14 @@ fn ProductDetail(product: AircraftProduct) -> impl IntoView {
         });
     };
 
-    let show_manual = product.show_manual;
+    // A product with a web manual (crate::manual::links) links to it. Every
+    // other Infinity aircraft carries its manual in the in-sim EFB, so the
+    // manual surfaces show by default; `manual_location()` is `None` only for
+    // a product that opts out with `manualLocation: ""`. A missing
+    // `tutorialUrl` still drops the tutorials card.
+    let web_manual = manual::manual_link_for_product(&product.slug);
+    let manual_location = product.manual_location().map(str::to_string);
+    let show_manual = web_manual.is_some() || manual_location.is_some();
     let show_tutorials = product.tutorial_url.is_some();
     let support_cards = 1 + usize::from(show_tutorials) + usize::from(show_manual);
     let support_grid = match support_cards {
@@ -307,16 +321,39 @@ fn ProductDetail(product: AircraftProduct) -> impl IntoView {
                                                     .into_any();
                                             }
                                             view! {
-                                                <Button
-                                                    variant=Variant::Solid
-                                                    size=Size::Lg
-                                                    icon=icons::SHOPPING_CART
-                                                    full_width=true
-                                                    loading=checkout_pending
-                                                    on_click=Callback::new(purchase)
-                                                >
-                                                    "Purchase"
-                                                </Button>
+                                                <label class="mb-3 flex cursor-pointer items-start gap-2.5 text-xs text-white/50 select-none">
+                                                    <input
+                                                        type="checkbox"
+                                                        prop:checked=move || ack_policy.get()
+                                                        on:change=move |ev| {
+                                                            ack_policy.set(event_target_checked(&ev))
+                                                        }
+                                                        class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-white/20 bg-white/5 accent-accent-600"
+                                                    />
+                                                    <span>
+                                                        "I've read the "
+                                                        <a href=nav::LEGAL_REFUNDS class=LINK>
+                                                            "refund policy"
+                                                        </a>
+                                                        " and understand this is a licence to use the aircraft, not a transfer of ownership."
+                                                    </span>
+                                                </label>
+                                                <div title=move || {
+                                                    (!ack_policy.get())
+                                                        .then_some("Please confirm you've read the refund policy")
+                                                }>
+                                                    <Button
+                                                        variant=Variant::Solid
+                                                        size=Size::Lg
+                                                        icon=icons::SHOPPING_CART
+                                                        full_width=true
+                                                        loading=checkout_pending
+                                                        disabled=Signal::derive(move || !ack_policy.get())
+                                                        on_click=Callback::new(purchase)
+                                                    >
+                                                        "Purchase"
+                                                    </Button>
+                                                </div>
                                             }
                                                 .into_any()
                                         }}
@@ -349,6 +386,45 @@ fn ProductDetail(product: AircraftProduct) -> impl IntoView {
                                     .into_any()
                             }}
 
+                            // Pre-purchase disclosure. This has to render above
+                            // the fold of the buy decision, not inside the EULA
+                            // modal: a refund policy only binds a buyer who could
+                            // read it before paying, and most buyers never open
+                            // the modal.
+                            <div class="-mt-4 mb-8 space-y-2 text-xs text-white/40">
+                                <p>
+                                    "This is a " <span class="text-white/60">"licence to use"</span>
+                                    " the aircraft, not a transfer of ownership, and the free Infinity Manager is required to install, update and run it. "
+                                    <button
+                                        type="button"
+                                        on:click=move |_| eula_open.set(true)
+                                        class=LINK
+                                    >
+                                        "Read the EULA"
+                                    </button>
+                                    " "
+                                    <a
+                                        href=nav::legal_eula(&product.slug)
+                                        class="text-white/50 underline underline-offset-2 hover:text-white/70"
+                                    >
+                                        "(open as page)"
+                                    </a>
+                                </p>
+                                <p>
+                                    <span class="text-white/60">"Refunds:"</span>
+                                    " full refund within 14 days of purchase, as long as you haven't installed the aircraft yet, and subject to the conditions in our refund policy. Faulty or not as described? No time limit — we'll fix it or refund it. Your statutory rights are not affected. "
+                                    <a href=nav::LEGAL_REFUNDS class=LINK>
+                                        "Read the full refund policy"
+                                    </a>
+                                    "."
+                                </p>
+                                <p>
+                                    "Payment is taken by Lemon Squeezy, our merchant of record; your statement will show "
+                                    <code>"LEMSQZY*"</code>
+                                    "."
+                                </p>
+                            </div>
+
                             <div class=cn!(
                                 "grid gap-4 border-y border-white/10 py-6 text-center",
                                 if show_manual { "grid-cols-3" } else { "grid-cols-2" },
@@ -376,7 +452,9 @@ fn ProductDetail(product: AircraftProduct) -> impl IntoView {
                                                     class="mx-auto mb-2 h-6 w-6 text-accent-400"
                                                 />
                                                 <div class="text-sm text-white/60">"Full Manual"</div>
-                                                <div class="text-sm text-white/60">"(WIP)"</div>
+                                                <div class="text-sm text-white/60">
+                                                    {if web_manual.is_some() { "Online" } else { "In-Sim EFB" }}
+                                                </div>
                                             </div>
                                         }
                                     })}
@@ -486,22 +564,42 @@ fn ProductDetail(product: AircraftProduct) -> impl IntoView {
                             })}
                         {show_manual
                             .then(|| {
+                                let body = match (web_manual.clone(), manual_location.clone()) {
+                                    (Some(href), _) => {
+                                        view! {
+                                            <p class="mb-4 text-white/60">
+                                                "Systems, procedures and limitations, all in the online manual."
+                                            </p>
+                                            <a
+                                                href=href
+                                                class="inline-block rounded-lg bg-accent-600 px-6 py-2 text-white transition-colors hover:bg-accent-700"
+                                            >
+                                                "Read the Manual"
+                                            </a>
+                                        }
+                                            .into_any()
+                                    }
+                                    (None, location) => {
+                                        view! {
+                                            <p class="mb-4 text-white/60">
+                                                "The full documentation and procedures guide ships inside the aircraft — there is nothing separate to download."
+                                            </p>
+                                            <div class="inline-flex items-center gap-2 rounded-lg border border-accent-400/30 bg-accent-500/10 px-4 py-2 text-sm font-semibold text-accent-200">
+                                                <Icon icon=brand::TABLET class="h-4 w-4 shrink-0" />
+                                                {location}
+                                            </div>
+                                        }
+                                            .into_any()
+                                    }
+                                };
                                 view! {
                                     <div class="text-center">
                                         <Icon
                                             icon=icons::FILE_TEXT
-                                            class="mx-auto mb-4 h-12 w-12 text-green-400"
+                                            class="mx-auto mb-4 h-12 w-12 text-accent-400"
                                         />
                                         <h3 class="mb-2 text-xl font-semibold">"Flight Manual"</h3>
-                                        <p class="mb-4 text-white/60">
-                                            "Comprehensive documentation and procedures guide. The guide is WIP and not currently available."
-                                        </p>
-                                        <button
-                                            type="button"
-                                            class="rounded-lg bg-green-600 px-6 py-2 text-white transition-colors hover:bg-green-700"
-                                        >
-                                            "WORK IN PROGRESS"
-                                        </button>
+                                        {body}
                                     </div>
                                 }
                             })}
@@ -535,53 +633,12 @@ fn ProductDetail(product: AircraftProduct) -> impl IntoView {
     }
 }
 
-const STANDARD_SECTIONS: &[(&str, &str)] = &[
-    (
-        "1. GRANT OF LICENSE",
-        "The Author grants you a limited, non-exclusive, non-transferable, royalty-free license to install and use the Add-on solely for personal, non-commercial entertainment purposes within Microsoft Flight Simulator.",
-    ),
-    (
-        "2. PERMITTED USE",
-        "You may install and use the Add-on on personal computers you own or control for private, non-commercial use only.",
-    ),
-    (
-        "5. NO WARRANTY",
-        "THE ADD-ON IS PROVIDED \"AS IS\" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT.",
-    ),
-    (
-        "6. LIMITATION OF LIABILITY",
-        "IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR EXEMPLARY DAMAGES ARISING FROM THE USE OR INABILITY TO USE THE ADD-ON.",
-    ),
-    (
-        "7. TERMINATION",
-        "This license terminates automatically if you violate any term. Upon termination, you must destroy all copies of the Add-on.",
-    ),
-    (
-        "8. GOVERNING LAW",
-        "This EULA shall be governed by the laws of the United States of America.",
-    ),
-];
-
-const RESTRICTIONS: &[&str] = &[
-    "Make backup or archival copies of the Add-on.",
-    "Redistribute, sell, rent, lease, sublicense, or otherwise transfer the Add-on or any part thereof.",
-    "Modify, adapt, translate, reverse engineer, decompile, disassemble, or create derivative works based on the Add-on.",
-    "Use the Add-on for any commercial purpose, including but not limited to flight training, professional simulation, or public exhibition where admission is charged.",
-    "Remove or alter any copyright, trademark, or proprietary notices in the Add-on files.",
-];
-
 #[component]
 fn EulaModal(
     product: AircraftProduct,
     open: RwSignal<bool>,
     on_close: Callback<()>,
 ) -> impl IntoView {
-    let company = product
-        .eula_company
-        .clone()
-        .unwrap_or_else(|| "the Author".to_string());
-    let heading = "mb-2 text-lg font-bold text-accent-400";
-
     view! {
         <Modal
             open=open
@@ -601,104 +658,7 @@ fn EulaModal(
             })
         >
             <div class="space-y-4 text-sm leading-relaxed text-white/90">
-                    <div class="mb-6 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
-                        <p class="mb-2 font-bold text-yellow-300">"IMPORTANT - READ CAREFULLY:"</p>
-                        <p class="text-yellow-200/90">
-                            {format!(
-                                "This End-User License Agreement (\"EULA\") is a legal agreement between you (the \"User\" or \"you\") and {} (the \"Author\") for the {} (\"Add-on\") for Microsoft Flight Simulator.",
-                                product.eula_company.clone().unwrap_or_default(),
-                                product.eula_product_ref.clone().unwrap_or_default(),
-                            )}
-                        </p>
-                        <p class="mt-3 text-yellow-200/90">
-                            "By downloading, installing, or using the Add-on, you agree to be bound by the terms of this EULA. If you do not agree, do not install or use the Add-on and delete all copies immediately."
-                        </p>
-                    </div>
-
-                    {product
-                        .eula_disclaimer
-                        .clone()
-                        .map(|text| {
-                            view! {
-                                <div class="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 p-4">
-                                    <p class="mb-2 font-bold text-red-300">"DISCLAIMER:"</p>
-                                    <p class="text-red-200/90">{text}</p>
-                                </div>
-                            }
-                        })}
-
-                    {STANDARD_SECTIONS
-                        .iter()
-                        .take(2)
-                        .map(|(title, body)| {
-                            view! {
-                                <div>
-                                    <h3 class=heading>{*title}</h3>
-                                    <p>{*body}</p>
-                                </div>
-                            }
-                        })
-                        .collect_view()}
-
-                    <div>
-                        <h3 class=heading>"3. RESTRICTIONS"</h3>
-                        <p class="mb-2">"You may NOT:"</p>
-                        <ul class="list-inside list-disc space-y-1 pl-4">
-                            {RESTRICTIONS
-                                .iter()
-                                .map(|item| view! { <li>{*item}</li> })
-                                .collect_view()}
-                        </ul>
-                    </div>
-
-                    <div>
-                        <h3 class=heading>"4. OWNERSHIP"</h3>
-                        <p>
-                            {format!(
-                                "The Add-on is licensed, not sold. {company} retains all right, title, and interest in and to the Add-on, including all intellectual property rights.",
-                            )}
-                        </p>
-                    </div>
-
-                    {STANDARD_SECTIONS
-                        .iter()
-                        .skip(2)
-                        .map(|(title, body)| {
-                            view! {
-                                <div>
-                                    <h3 class=heading>{*title}</h3>
-                                    <p>{*body}</p>
-                                </div>
-                            }
-                        })
-                        .collect_view()}
-
-                    {product
-                        .eula_extra_sections
-                        .clone()
-                        .into_iter()
-                        .map(|section| {
-                            view! {
-                                <div>
-                                    <h3 class=heading>{section.heading}</h3>
-                                    {section
-                                        .body
-                                        .into_iter()
-                                        .map(|para| view! { <p class="mb-2">{para}</p> })
-                                        .collect_view()}
-                                </div>
-                            }
-                        })
-                        .collect_view()}
-
-                    <div class="mt-6 border-t border-white/10 pt-4">
-                        <p class="text-xs text-white/60">
-                            {product.eula_copyright.clone().unwrap_or_default()}
-                        </p>
-                        <p class="mt-1 text-xs text-white/60">
-                            "Microsoft Flight Simulator is a trademark of Microsoft Corporation."
-                        </p>
-                    </div>
+                <EulaDocument product=product.clone() />
             </div>
         </Modal>
     }

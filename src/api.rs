@@ -77,8 +77,15 @@ pub struct AircraftProduct {
     pub support_discord_url: Option<String>,
     #[serde(default)]
     pub tutorial_url: Option<String>,
-    #[serde(default = "yes")]
-    pub show_manual: bool,
+    // The legacy `showManual` flag is deliberately not read: it hid a "manual
+    // coming soon" placeholder, a state that no longer exists now the manual
+    // ships in the in-sim EFB. Drop the manual surfaces with
+    // `manualLocation: ""` instead.
+    /// Where this aircraft's flight manual lives. `None` means the in-sim EFB
+    /// wording shared by every Infinity aircraft; an empty string hides the
+    /// manual tile and card entirely. See [`AircraftProduct::manual_location`].
+    #[serde(default)]
+    pub manual_location: Option<String>,
     #[serde(default)]
     pub eula_company: Option<String>,
     #[serde(default)]
@@ -101,7 +108,20 @@ fn yes() -> bool {
     true
 }
 
+/// Where every Infinity aircraft carries its manual unless the catalog says
+/// otherwise.
+pub const DEFAULT_MANUAL_LOCATION: &str = "In the cockpit EFB, under the Aircraft tab";
+
 impl AircraftProduct {
+    /// The manual location to show, or `None` when the product has no manual.
+    pub fn manual_location(&self) -> Option<&str> {
+        let location = self
+            .manual_location
+            .as_deref()
+            .unwrap_or(DEFAULT_MANUAL_LOCATION);
+        (!location.trim().is_empty()).then_some(location)
+    }
+
     pub fn entitlements(&self) -> Vec<String> {
         if self.entitlement_ids.is_empty() {
             vec![self.slug.clone()]

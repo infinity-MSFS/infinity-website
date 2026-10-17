@@ -1,8 +1,10 @@
 use infinity_ui::prelude::*;
 use leptos::task::spawn_local;
 
+use super::legal::LINK;
 use crate::api::{self, AircraftProduct, MIN_PASSWORD_LENGTH, SupportTicket};
 use crate::auth::{User, use_auth};
+use crate::brand;
 use crate::components::DownloadButton;
 use crate::nav;
 use crate::state::{use_catalog, use_manager};
@@ -151,7 +153,11 @@ fn Dashboard() -> impl IntoView {
                     </Show>
 
                     <p class="mt-4 text-xs text-white/40">
-                        "Install and update your aircraft from inside the Infinity Manager above."
+                        "Install and update your aircraft from inside the Infinity Manager above. Need a refund, or something not working? See the "
+                        <a href=nav::LEGAL_REFUNDS class=LINK>
+                            "refund policy"
+                        </a>
+                        "."
                     </p>
                 </section>
 
@@ -175,6 +181,9 @@ fn Dashboard() -> impl IntoView {
                             on_click=Callback::new(move |()| support_open.set(true))
                         >
                             "Email support"
+                        </Button>
+                        <Button variant=Variant::Glass icon=brand::RECEIPT href=nav::LEGAL_REFUNDS>
+                            "Refund Policy"
                         </Button>
                     </ButtonGroup>
                 </Panel>

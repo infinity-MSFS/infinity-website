@@ -8,6 +8,7 @@ mod beta_sign;
 mod developer_docs;
 mod docs_landing;
 mod home;
+mod legal;
 mod manager;
 mod purchase;
 
@@ -21,5 +22,6 @@ pub use beta_sign::BetaSignDocument;
 pub use developer_docs::DeveloperDocs;
 pub use docs_landing::DocsLanding;
 pub use home::Home;
+pub use legal::{EulaPage, PrivacyPolicy, RefundPolicy, Terms};
 pub use manager::Manager;
 pub use purchase::{PurchaseCancelled, PurchaseSuccess};

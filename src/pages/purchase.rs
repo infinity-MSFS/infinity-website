@@ -1,7 +1,9 @@
 use infinity_ui::prelude::*;
 use leptos_router::hooks::use_query_map;
 
+use super::legal::LINK;
 use crate::auth::use_auth;
+use crate::brand;
 use crate::nav;
 use crate::platform::platform_label;
 use crate::state::use_manager;
@@ -237,11 +239,34 @@ pub fn PurchaseSuccess() -> impl IntoView {
                         <Icon icon=icons::ARROW_RIGHT class="h-4 w-4" />
                     </button>
                 </div>
+
+                // The refund window starts here and this is the one moment the
+                // buyer is provably reading. Also heads off the "I don't
+                // recognise this charge" dispute, since the descriptor isn't
+                // our name.
+                <div class="space-y-2 px-1 text-xs text-white/50">
+                    <p>
+                        <span class="text-white/70">"Changed your mind?"</span>
+                        " Full refund within 14 days of this purchase, as long as you haven't installed the aircraft yet. If the aircraft turns out to be faulty or not as described, there's no time limit and no install condition on that. "
+                        <a href=nav::LEGAL_REFUNDS class=LINK>
+                            "Refund policy"
+                        </a>
+                    </p>
+                    <p>
+                        "Your receipt comes from Lemon Squeezy, our merchant of record; your statement will show "
+                        <code>"LEMSQZY*"</code>
+                        "."
+                    </p>
+                </div>
             </div>
         </div>
     }
 }
 
+// There is nothing to show about a checkout that never completed beyond how to
+// get help. This page used to render an "Attempted Product Details" card that
+// always read "Product key not available" — on a site whose own copy promises
+// no license keys.
 #[component]
 pub fn PurchaseCancelled() -> impl IntoView {
     let go = nav::use_go();
@@ -255,21 +280,29 @@ pub fn PurchaseCancelled() -> impl IntoView {
                     "Your purchase was not completed. No charges have been made to your account."
                 </p>
 
-                <div class="mb-6 rounded-lg border border-white/10 bg-white/5 p-6 text-left">
-                    <h2 class="mb-4 flex items-center gap-2 text-xl font-semibold">
-                        <Icon icon=icons::KEY_ROUND class="h-5 w-5 text-blue-400" />
-                        "Attempted Product Details"
+                <div class="mb-6 rounded-lg border border-white/10 bg-white/5 p-5 text-left">
+                    <h2 class="mb-2 flex items-center gap-2 text-base font-semibold">
+                        <Icon icon=brand::LIFE_BUOY class="h-4 w-4 text-accent-400" />
+                        "Something go wrong?"
                     </h2>
-                    <div class="space-y-3 text-sm">
-                        <p class="text-white/60 italic">"Product key not available."</p>
-                    </div>
+                    <p class="text-sm text-white/60">
+                        "If you meant to buy and the checkout failed, or you think you have been charged when you shouldn't have been, get in touch from your "
+                        <a href=nav::USER class=LINK>
+                            "dashboard"
+                        </a>
+                        " and we'll sort it out. Our "
+                        <a href=nav::LEGAL_REFUNDS class=LINK>
+                            "refund policy"
+                        </a>
+                        " explains what happens next."
+                    </p>
                 </div>
 
                 <div class="space-y-3">
                     <button
                         type="button"
                         on:click=move |_| go.run(nav::USER.to_string())
-                        class="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-blue-700"
+                        class="flex w-full items-center justify-center gap-2 rounded-lg bg-accent-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-accent-700"
                     >
                         <Icon icon=icons::HOUSE class="h-5 w-5" />
                         "Go to Dashboard"

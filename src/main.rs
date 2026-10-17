@@ -5,6 +5,7 @@ mod background;
 mod brand;
 mod components;
 mod docs;
+mod manual;
 mod nav;
 mod pages;
 mod platform;

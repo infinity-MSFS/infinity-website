@@ -14,13 +14,27 @@ pub const ATA: &str = "/ata";
 pub const BETA_ADMIN: &str = "/beta/admin";
 pub const PURCHASE_SUCCESS: &str = "/purchase-success";
 pub const PURCHASE_CANCELLED: &str = "/purchase-cancelled";
+pub const LEGAL_REFUNDS: &str = "/legal/refunds";
+pub const LEGAL_PRIVACY: &str = "/legal/privacy";
+pub const LEGAL_TERMS: &str = "/legal/terms";
 
 /// GitHub organisation that hosts everything we open-source.
 pub const GITHUB_ORG: &str = "https://github.com/infinity-MSFS";
 
+/// The community Discord. Same invite used across the aircraft, manager and
+/// account pages.
+pub const DISCORD_URL: &str = "https://discord.gg/HZt4MCEYZk";
+
 /// Route for the e-signing page of a single beta document.
 pub fn beta_sign(document_id: &str) -> String {
     format!("{BETA}/sign/{document_id}")
+}
+
+/// Route for a product's standalone EULA. Per-product, because the document
+/// interpolates catalog fields: a product-less EULA would be a different
+/// document from the one anyone actually accepted.
+pub fn legal_eula(slug: &str) -> String {
+    format!("/legal/eula/{slug}")
 }
 
 pub fn top_nav_items() -> Vec<TopNavItem> {

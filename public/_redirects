@@ -1,4 +1,5 @@
 # Leptos client-side router: serve the SPA shell for every path so deep links
-# and hard refreshes (/aircraft/:slug, /docs/developer/:slug, /ata/:chapter)
-# resolve instead of 404ing.
+# and hard refreshes (/aircraft/:slug, /docs/developer/:slug, /ata/:chapter,
+# /manual/:manual/:chapter, /legal/refunds, /legal/eula/:slug) resolve instead
+# of 404ing.
 /*  /index.html  200

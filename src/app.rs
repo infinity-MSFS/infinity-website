@@ -6,7 +6,7 @@ use leptos_router::path;
 
 use crate::auth::{provide_auth, use_auth};
 use crate::background::{self, BackgroundPicker};
-use crate::brand::{GLOW_NAV, InfinityMark};
+use crate::brand::{COPYRIGHT_YEAR, GLOW_NAV, InfinityMark, PUBLISHER};
 use crate::nav;
 use crate::pages;
 use crate::state::provide_remote_state;
@@ -66,30 +66,47 @@ fn Chrome() -> impl IntoView {
     });
 
     view! {
+        // `flex flex-col` + a `flex-1` routes wrapper is what keeps SiteFooter
+        // at the bottom of a fixed-height (h-screen) scroll container. Without
+        // it a short route renders the footer mid-screen with dead space below.
         <div class=move || {
                    cn!(
-                       "relative h-screen w-screen overflow-x-hidden bg-black/80",
+                       "relative flex h-screen w-screen flex-col overflow-x-hidden bg-black/80",
                        if is_home.get() { "overflow-y-hidden" } else { "overflow-y-auto" },
                    )
                }>
                    <SiteNav />
-                   <Routes fallback=|| view! { <pages::NotFound /> }>
-                       <Route path=path!("/") view=pages::Home />
-                       <Route path=path!("/about") view=pages::Manager />
-                       <Route path=path!("/aircraft") view=pages::AircraftListing />
-                       <Route path=path!("/aircraft/:slug") view=pages::AircraftDetail />
-                       <Route path=path!("/docs") view=pages::DocsLanding />
-                       <Route path=path!("/docs/developer") view=pages::DeveloperDocs />
-                       <Route path=path!("/docs/developer/:slug") view=pages::DeveloperDocs />
-                       <Route path=path!("/user") view=pages::UserDashboard />
-                       <Route path=path!("/beta") view=pages::BetaSignup />
-                       <Route path=path!("/beta/admin") view=pages::BetaAdmin />
-                       <Route path=path!("/beta/sign/:doc") view=pages::BetaSignDocument />
-                       <Route path=path!("/purchase-success") view=pages::PurchaseSuccess />
-                       <Route path=path!("/purchase-cancelled") view=pages::PurchaseCancelled />
-                       <Route path=path!("/ata") view=pages::AtaDocuments />
-                       <Route path=path!("/ata/:chapter") view=pages::AtaDocuments />
-                   </Routes>
+                   <div class="flex-1">
+                       <Routes fallback=|| view! { <pages::NotFound /> }>
+                           <Route path=path!("/") view=pages::Home />
+                           <Route path=path!("/about") view=pages::Manager />
+                           <Route path=path!("/aircraft") view=pages::AircraftListing />
+                           <Route path=path!("/aircraft/:slug") view=pages::AircraftDetail />
+                           <Route path=path!("/docs") view=pages::DocsLanding />
+                           <Route path=path!("/docs/developer") view=pages::DeveloperDocs />
+                           <Route path=path!("/docs/developer/:slug") view=pages::DeveloperDocs />
+                           <Route path=path!("/user") view=pages::UserDashboard />
+                           <Route path=path!("/beta") view=pages::BetaSignup />
+                           <Route path=path!("/beta/admin") view=pages::BetaAdmin />
+                           <Route path=path!("/beta/sign/:doc") view=pages::BetaSignDocument />
+                           <Route path=path!("/purchase-success") view=pages::PurchaseSuccess />
+                           <Route path=path!("/purchase-cancelled") view=pages::PurchaseCancelled />
+                           // Legal. The EULA is per-slug because it interpolates
+                           // catalog fields.
+                           <Route path=path!("/legal/refunds") view=pages::RefundPolicy />
+                           <Route path=path!("/legal/privacy") view=pages::PrivacyPolicy />
+                           <Route path=path!("/legal/terms") view=pages::Terms />
+                           <Route path=path!("/legal/eula/:slug") view=pages::EulaPage />
+                           <Route path=path!("/ata") view=pages::AtaDocuments />
+                           <Route path=path!("/ata/:chapter") view=pages::AtaDocuments />
+                           // One route with an optional chapter, so moving between the
+                           // overview and a chapter doesn't remount the reader.
+                           <Route path=path!("/manual/:manual/:chapter?") view=crate::manual::ManualPage />
+                       </Routes>
+                   </div>
+                   <Show when=move || !is_home.get()>
+                       <SiteFooter />
+                   </Show>
                </div>
     }
 }
@@ -103,6 +120,7 @@ fn SiteNav() -> impl IntoView {
 
     view! {
         <TopNav
+            class="shrink-0"
             items=items
             active=active
             on_select=go
@@ -125,6 +143,55 @@ fn SiteNav() -> impl IntoView {
                 }
             })
         />
+    }
+}
+
+const FOOTER_LINK: &str =
+    "text-white/50 underline-offset-4 transition-colors hover:text-white/80 hover:underline";
+
+/// Site-wide footer, and the only place the legal pages are reachable from
+/// every route. The nav deliberately doesn't carry them: they aren't
+/// destinations anyone browses to.
+///
+/// Not rendered on the home route — it locks `overflow-y-hidden` on both body
+/// and the app container, so a footer there would be unreachable anyway.
+#[component]
+fn SiteFooter() -> impl IntoView {
+    view! {
+        <footer class="relative z-10 mt-16 shrink-0 border-t border-white/10 bg-black/20 backdrop-blur-sm">
+            <div class="mx-auto max-w-6xl px-6 py-8 text-xs md:px-8">
+                <nav class="flex flex-wrap items-center gap-x-5 gap-y-2">
+                    <a href=nav::LEGAL_REFUNDS class=FOOTER_LINK>
+                        "Refund Policy"
+                    </a>
+                    <a href=nav::LEGAL_PRIVACY class=FOOTER_LINK>
+                        "Privacy"
+                    </a>
+                    <a href=nav::LEGAL_TERMS class=FOOTER_LINK>
+                        "Terms"
+                    </a>
+                    <a href=nav::AIRCRAFT class=FOOTER_LINK>
+                        "Aircraft"
+                    </a>
+                    <a
+                        href=nav::DISCORD_URL
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class=FOOTER_LINK
+                    >
+                        "Discord"
+                    </a>
+                </nav>
+                <p class="mt-5 text-white/40">
+                    {format!("© {COPYRIGHT_YEAR} {PUBLISHER}. All rights reserved.")}
+                </p>
+                <p class="mt-1 text-white/30">
+                    {format!(
+                        "Microsoft Flight Simulator is a trademark of Microsoft Corporation. {PUBLISHER} is not affiliated with, endorsed by, or sponsored by Microsoft Corporation.",
+                    )}
+                </p>
+            </div>
+        </footer>
     }
 }
 

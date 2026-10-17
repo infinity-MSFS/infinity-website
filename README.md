@@ -114,8 +114,9 @@ versus a few MB optimized, and Cloudflare rejects files over 25 MiB.
 ## Deploy
 
 ```powershell
-./scripts/deploy.ps1                    # production
-./scripts/deploy.ps1 -Branch my-feature # preview deployment
+./scripts/deploy.ps1                    # preview of branch "main"
+./scripts/deploy.ps1 -Branch my-feature # preview of another branch
+./scripts/deploy.ps1 -Production        # production (live domains)
 ./scripts/deploy.ps1 -Env prod          # build against a different kivro env
 ```
 

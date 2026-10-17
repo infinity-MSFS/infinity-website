@@ -12,26 +12,41 @@
     kivro environment to pull config from. Defaults to the project default (dev).
 
 .PARAMETER Branch
-    Cloudflare Pages branch. The project's production branch deploys to the live
-    domain; anything else becomes a preview deployment. Defaults to "main".
+    Cloudflare Pages branch for a preview deployment, served at
+    <branch>.infinity-website-ac6.pages.dev. Defaults to "main".
+
+.PARAMETER Production
+    Deploy to the project's production branch, which serves the live domains.
+    Cannot be combined with -Branch.
 
 .PARAMETER SkipBuild
     Upload the existing dist/ without rebuilding.
 
 .EXAMPLE
-    ./scripts/deploy.ps1 -Env prod
+    ./scripts/deploy.ps1 -Env prod -Production
     ./scripts/deploy.ps1 -Branch preview-auth
 #>
 [CmdletBinding()]
 param(
     [string]$Env,
     [string]$Branch = "main",
+    [switch]$Production,
     [switch]$SkipBuild
 )
 
 $ErrorActionPreference = "Stop"
 
 $ProjectName = "infinity-website"
+# Set on the Pages project, not in this repo: a direct-upload project fixes its
+# production branch at creation. Every other branch name is a preview.
+$ProductionBranch = "master"
+
+if ($Production) {
+    if ($PSBoundParameters.ContainsKey("Branch")) {
+        throw "-Production deploys to '$ProductionBranch'; drop -Branch."
+    }
+    $Branch = $ProductionBranch
+}
 $Root = Split-Path -Parent $PSScriptRoot
 $Dist = Join-Path $Root "dist"
 
@@ -97,7 +112,8 @@ try {
     if ($wasm) { Write-Ok "wasm: $([math]::Round($wasm.Length / 1MB, 2)) MB" }
     Write-Ok "$((Get-ChildItem $Dist -Recurse -File).Count) files ready"
 
-    Write-Step "Deploying to Cloudflare Pages ($ProjectName, branch: $Branch)"
+    $target = if ($Branch -eq $ProductionBranch) { "PRODUCTION" } else { "preview" }
+    Write-Step "Deploying to Cloudflare Pages ($ProjectName, branch: $Branch, $target)"
     & $Npx --yes wrangler@latest pages deploy $Dist `
         --project-name=$ProjectName `
         --branch=$Branch

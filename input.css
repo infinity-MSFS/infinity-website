@@ -5,29 +5,29 @@
 @tailwind utilities;
 
 :root {
-    --ac-200: 167 243 208;
-    --ac-300: 110 231 183;
-    --ac-400: 52 211 153;
-    --ac-500: 16 185 129;
-    --ac-600: 5 150 105;
-    --ac-700: 4 120 87;
-    --ac-900: 6 78 59;
+	--ac-200: 167 243 208;
+	--ac-300: 110 231 183;
+	--ac-400: 52 211 153;
+	--ac-500: 16 185 129;
+	--ac-600: 5 150 105;
+	--ac-700: 4 120 87;
+	--ac-900: 6 78 59;
 
-    overflow-x: hidden;
-    font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-    line-height: 1.5;
-    font-weight: 400;
+	overflow-x: hidden;
+	font-family: "Geologica", sans-serif;
+	line-height: 1.5;
+	font-weight: 100;
 }
 
 * {
-    box-sizing: border-box;
+	box-sizing: border-box;
 }
 
 html,
 body {
-    width: 100vw;
-    height: 100vh;
-    background-color: #000;
+	width: 100vw;
+	height: 100vh;
+	background-color: #000;
 }
 
 /* Manual reader (src/manual). The sticky bar's height feeds the offsets the
@@ -35,27 +35,27 @@ body {
    utilities read. A host sets --manual-top-offset to its own sticky header's
    height. */
 .manual {
-    --manual-top: var(--manual-top-offset, 0px);
-    --manual-bar: 4rem;
-    --manual-landing: calc(var(--manual-top) + var(--manual-bar) + 1.25rem);
-    scroll-margin-top: var(--manual-top);
+	--manual-top: var(--manual-top-offset, 0px);
+	--manual-bar: 4rem;
+	--manual-landing: calc(var(--manual-top) + var(--manual-bar) + 1.25rem);
+	scroll-margin-top: var(--manual-top);
 }
 
 /* The aircraft buttons get their own row in the bar on phones. */
 .manual-aircraft {
-    --manual-bar: 7rem;
+	--manual-bar: 7rem;
 }
 
 @media (min-width: 768px) {
-    .manual-aircraft {
-        --manual-bar: 4rem;
-    }
+	.manual-aircraft {
+		--manual-bar: 4rem;
+	}
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .manual *,
-    .manual *::before,
-    .manual *::after {
-        transition: none;
-    }
+	.manual *,
+	.manual *::before,
+	.manual *::after {
+		transition: none;
+	}
 }

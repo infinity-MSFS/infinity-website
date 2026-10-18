@@ -5,18 +5,17 @@ use web_sys::MouseEvent;
 use super::model::{self, ResolvedLink};
 use super::types::{AircraftName, Manual};
 
-/// Glass panel behind headers, sections and cards.
-pub const PANEL: &str = "rounded-[1.75rem] border border-white/10 bg-white/[0.045] shadow-[0_12px_40px_rgba(0,0,0,0.28)] backdrop-blur-[16px]";
 /// Opaque, so light text behind a popover doesn't show through.
-pub const POPOVER: &str =
-    "border border-white/10 bg-[rgb(6,14,16)] shadow-[0_16px_48px_rgba(0,0,0,0.5)]";
+pub const POPOVER: &str = "rounded-sm border border-white/10 bg-[rgb(5,9,11)]";
 pub const FOCUS: &str = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-400";
-/// Bar controls: the chapter menu button and the icon buttons.
+/// Bar controls: the chapter menu button and the icon buttons. Underlined
+/// rather than boxed, like the site's other inputs.
 pub const CONTROL: &str =
-    "h-10 rounded-2xl border text-sm text-white transition-colors duration-150";
-pub const CONTROL_IDLE: &str =
-    "border-white/10 bg-black/20 hover:border-white/20 hover:bg-white/[0.06]";
-pub const CONTROL_OPEN: &str = "border-accent-400/30 bg-accent-400/[0.08]";
+    "h-10 border-b text-sm font-light text-white transition-colors duration-150";
+pub const CONTROL_IDLE: &str = "border-white/15 hover:border-white/40";
+pub const CONTROL_OPEN: &str = "border-accent-400/60";
+/// Mono tag on content limited to some aircraft, e.g. "DC-10 only".
+pub const APPLIES: &str = "font-mono text-[10px] tracking-[0.2em] text-sky-300/75 uppercase";
 
 /// Lucide `list`.
 pub const LIST: IconData = IconData::new(

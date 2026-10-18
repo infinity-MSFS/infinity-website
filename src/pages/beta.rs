@@ -23,16 +23,26 @@ use crate::api::{
     QuizAnswer, QuizPaper, QuizScore,
 };
 use crate::auth::use_auth;
+use crate::components::{EYEBROW, HoverRule, SectionLabel};
 use crate::nav;
 
 const MIN_WHY_YOU: usize = 40;
 
-const STEPS: [(&str, IconData); 4] = [
-    ("Systems check", icons::GAUGE),
-    ("In your words", icons::MESSAGE_CIRCLE),
-    ("Your details", icons::USER),
-    ("Review", icons::CIRCLE_CHECK),
-];
+const STEPS: [&str; 4] = ["Systems check", "In your words", "Your details", "Review"];
+
+/// Spec row: mono label on the left, value on the right.
+const SPEC_ROW: &str = "grid gap-2 border-b border-white/10 py-4 md:grid-cols-[14rem_1fr] md:gap-8";
+const SPEC_LABEL: &str = "font-mono text-xs tracking-wider text-white/45 uppercase";
+
+/// Left-rule notices, in place of tinted alert boxes.
+const NOTICE_ERROR: &str = "border-red-400/60 text-red-200";
+const NOTICE_WARNING: &str = "border-amber-400/60 text-amber-100";
+
+/// Mono uppercase status label above a stage heading.
+const STATUS: &str = "mb-4 font-mono text-[11px] tracking-[0.25em] uppercase";
+
+/// Secondary action: a text link with a leading arrow.
+const BACK_LINK: &str = "group inline-flex items-center gap-2 self-start text-sm text-white/55 transition-colors hover:text-white disabled:pointer-events-none disabled:opacity-40";
 
 fn local_timezone() -> String {
     let options = js_sys::Intl::DateTimeFormat::new(&js_sys::Array::new(), &js_sys::Object::new())
@@ -264,8 +274,8 @@ pub fn BetaSignup() -> impl IntoView {
     };
 
     view! {
-        <AnimatedPage class="relative z-10 min-h-screen px-4 py-12 text-white md:px-8">
-            <div class="mx-auto max-w-4xl">
+        <AnimatedPage class="min-h-screen text-white">
+            <div class="mx-auto max-w-6xl px-6 py-10 md:px-10 md:py-14">
                 <Header />
 
                 {move || {
@@ -273,11 +283,11 @@ pub fn BetaSignup() -> impl IntoView {
                         .get()
                         .map(|message| {
                             view! {
-                                <Alert
-                                    tone=Tone::Danger
+                                <Notice
+                                    tone=NOTICE_ERROR
                                     title="Couldn't load your beta status"
-                                    description=message
-                                    class="mb-8"
+                                    message=message
+                                    spacing="mb-10"
                                 />
                             }
                         })
@@ -289,7 +299,7 @@ pub fn BetaSignup() -> impl IntoView {
                 >
                     {move || {
                         let Some(current) = state.get() else {
-                            return view! { <LoadingPanel /> }.into_any();
+                            return view! { <Loading /> }.into_any();
                         };
                         match current.status {
                             BetaStatus::Requested => {
@@ -314,11 +324,11 @@ pub fn BetaSignup() -> impl IntoView {
                                             .get()
                                             .map(|message| {
                                                 view! {
-                                                    <Alert
-                                                        tone=Tone::Danger
+                                                    <Notice
+                                                        tone=NOTICE_ERROR
                                                         title="Couldn't load the questionnaire"
-                                                        description=message
-                                                        class="mb-6"
+                                                        message=message
+                                                        spacing="mb-10"
                                                     />
                                                 }
                                             })
@@ -395,40 +405,76 @@ fn Header() -> impl IntoView {
     let go = nav::use_go();
 
     view! {
-        <div class="mb-8">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <Badge tone=Tone::Info icon=icons::PLANE size=Size::Lg>
-                    "Closed beta · Aerodynamics DC-10"
-                </Badge>
+        <header class="mb-16 max-w-3xl">
+            <p class=cn!("mb-10", EYEBROW)>"Infinity / Beta"</p>
+            <h1 class="text-5xl leading-[1.02] font-extralight tracking-tight md:text-7xl">
+                "Fly the DC-10"
+                <br />
+                <span class="font-semibold text-accent-300">"before anyone else."</span>
+            </h1>
+            <p class="mt-8 max-w-xl border-l border-accent-400/40 pl-5 text-base leading-relaxed font-light text-white/65 md:text-lg">
+                "We're picking a small group who know the aircraft and can report a bug properly. Start with a short systems questionnaire, then tell us who you are and why you."
+            </p>
+            <div class="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-[11px]">
+                <span class="tracking-[0.2em] text-white/40 uppercase">
+                    "Closed beta  /  Aerodynamics DC-10"
+                </span>
                 // Staff shortcut into the review queue. The route gates itself
                 // and the worker gates the data; this only saves typing a URL.
                 <Show when=move || auth.entitlements.get().is_developer()>
-                    <Button
-                        variant=Variant::Glass
-                        size=Size::Sm
-                        icon=icons::USERS
-                        on_click=nav::go_to(go, nav::BETA_ADMIN)
+                    <button
+                        type="button"
+                        on:click=move |_| go.run(nav::BETA_ADMIN.to_string())
+                        class="group inline-flex items-center gap-2 tracking-[0.2em] text-amber-300 uppercase transition-colors hover:text-amber-200"
                     >
                         "Review applications"
-                    </Button>
+                        <Icon
+                            icon=icons::ARROW_RIGHT
+                            class="h-3 w-3 transition-transform group-hover:translate-x-0.5"
+                        />
+                    </button>
                 </Show>
             </div>
-            <h1 class="mt-4 mb-3 text-4xl font-bold">"Fly the DC-10 before anyone else"</h1>
-            <p class="max-w-2xl leading-relaxed text-white/70">
-                "We're picking a small group who know the aircraft and can report a bug properly. Start with a short systems questionnaire, then tell us who you are and why you."
-            </p>
-        </div>
+        </header>
     }
 }
 
 #[component]
-fn LoadingPanel() -> impl IntoView {
+fn Loading() -> impl IntoView {
     view! {
-        <Panel class="space-y-3 p-6">
-            <Skeleton class="h-5 w-48" />
-            <Skeleton class="h-4 w-full" />
-            <Skeleton class="h-4 w-2/3" />
-        </Panel>
+        <div class=cn!("flex items-center gap-3 border-t border-white/10 py-10", EYEBROW)>
+            <Spinner size=Size::Sm />
+            "Loading…"
+        </div>
+    }
+}
+
+/// A left-ruled status line: mono title over the message.
+#[component]
+fn Notice(
+    tone: &'static str,
+    #[prop(into)] title: String,
+    #[prop(into)] message: String,
+    #[prop(optional)] spacing: &'static str,
+) -> impl IntoView {
+    view! {
+        <div class=cn!("border-l pl-4 text-sm leading-relaxed", tone, spacing)>
+            <p class="mb-1 font-mono text-[11px] tracking-[0.2em] uppercase">{title}</p>
+            <p class="font-light opacity-80">{message}</p>
+        </div>
+    }
+}
+
+/// Small print block: mono label over light copy, under a hairline.
+#[component]
+fn Note(label: &'static str, children: Children) -> impl IntoView {
+    view! {
+        <div class="mt-10 max-w-2xl border-t border-white/10 pt-5">
+            <p class="mb-2 font-mono text-[11px] tracking-[0.25em] text-accent-400/80 uppercase">
+                {label}
+            </p>
+            <p class="text-sm leading-relaxed font-light text-white/65">{children()}</p>
+        </div>
     }
 }
 
@@ -436,70 +482,70 @@ fn LoadingPanel() -> impl IntoView {
 fn SignedOut() -> impl IntoView {
     let auth = use_auth();
     view! {
-        <Panel class="p-8 text-center">
-            <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
-                <Icon icon=icons::LOG_IN class="h-6 w-6 text-accent-400" />
-            </div>
-            <h2 class="mb-2 text-xl font-bold">"Sign in to apply"</h2>
-            <p class="mx-auto mb-6 max-w-md text-sm leading-relaxed text-white/60">
+        <section class="border-t border-white/10 pt-10">
+            <h2 class="mb-4 text-3xl font-extralight tracking-tight md:text-4xl">
+                "Sign in "
+                <span class="font-semibold text-accent-300">"to apply."</span>
+            </h2>
+            <p class="mb-8 max-w-md border-l border-accent-400/40 pl-5 font-light text-white/60">
                 "Applications are tied to your account so we can track your status and, if you're selected, hand you the paperwork on this same page."
             </p>
-            <Button
-                variant=Variant::Solid
-                icon=icons::LOG_IN
-                on_click=Callback::new(move |()| auth.login())
+            <button
+                type="button"
+                on:click=move |_| auth.login()
+                class="group inline-flex items-center gap-2 text-lg font-medium transition-colors hover:text-accent-300"
             >
                 "Sign in"
-            </Button>
-        </Panel>
+                <Icon
+                    icon=icons::ARROW_RIGHT
+                    class="h-4 w-4 transition-transform group-hover:translate-x-1"
+                />
+            </button>
+        </section>
     }
 }
 
 #[component]
 fn Steps(#[prop(into)] current: Signal<usize>) -> impl IntoView {
     view! {
-        <div class="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <ol class="mb-16 grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-4">
             {STEPS
                 .iter()
                 .enumerate()
-                .map(|(index, (label, icon))| {
+                .map(|(index, label)| {
                     let done = Signal::derive(move || current.get() > index);
                     let active = Signal::derive(move || current.get() == index);
                     view! {
-                        <div class="flex flex-1 items-center gap-3">
-                            <div class=move || {
+                        <li class=move || {
+                            cn!(
+                                "border-t pt-3 transition-colors",
+                                if active.get() {
+                                    "border-accent-400"
+                                } else if done.get() {
+                                    "border-accent-400/40"
+                                } else {
+                                    "border-white/10"
+                                },
+                            )
+                        }>
+                            <p class="mb-1 font-mono text-[11px] text-accent-400/80">
+                                {format!("{:02}", index + 1)}
+                            </p>
+                            <p class=move || {
                                 cn!(
-                                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors",
+                                    "truncate text-sm",
                                     if active.get() {
-                                        "border-accent-400/40 bg-accent-500/15 text-accent-300"
-                                    } else if done.get() {
-                                        "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
+                                        "font-medium text-white"
                                     } else {
-                                        "border-white/10 bg-white/5 text-white/40"
+                                        "font-light text-white/45"
                                     },
                                 )
-                            }>
-                                {move || {
-                                    let glyph = if done.get() { icons::CHECK } else { *icon };
-                                    view! { <Icon icon=glyph class="h-4 w-4" /> }
-                                }}
-                            </div>
-                            <div class="min-w-0">
-                                <div class="text-[11px] uppercase tracking-[0.16em] text-white/40">
-                                    {format!("Step {}", index + 1)}
-                                </div>
-                                <div class=move || {
-                                    cn!(
-                                        "truncate text-sm font-semibold",
-                                        if active.get() { "text-white" } else { "text-white/50" },
-                                    )
-                                }>{*label}</div>
-                            </div>
-                        </div>
+                            }>{*label}</p>
+                        </li>
                     }
                 })
                 .collect_view()}
-        </div>
+        </ol>
     }
 }
 
@@ -513,100 +559,113 @@ fn QuizStep(
     #[prop(into)] on_next: Callback<()>,
 ) -> impl IntoView {
     view! {
-        <Callout tone=Tone::Info icon=icons::GAUGE title="Systems check" class="mb-6">
-            "Ten questions on how the DC-10 actually works. We're not looking for a perfect score — we're looking for someone who can tell a hydraulic problem from an electrical one when they file a report. Your score goes to us with the application; it doesn't block you from submitting."
-        </Callout>
+        <section>
+            <SectionLabel num="01" label="Systems check" />
+            <p class="mb-10 max-w-2xl text-sm leading-relaxed font-light text-white/65">
+                "Ten questions on how the DC-10 actually works. We're not looking for a perfect score — we're looking for someone who can tell a hydraulic problem from an electrical one when they file a report. Your score goes to us with the application; it doesn't block you from submitting."
+            </p>
 
-        <Panel class="mb-6 flex items-center gap-4 p-4">
-            <Progress
-                value=Signal::derive(move || {
-                    let total = total.get();
-                    if total == 0 { 0.0 } else { answered.get() as f64 / total as f64 }
-                })
-                tone=Tone::Accent
-                class="flex-1"
-            />
-            <div class="shrink-0 text-sm tabular-nums text-white/60">
-                {move || format!("{} / {} answered", answered.get(), total.get())}
+            <div class="mb-10 flex items-center gap-4">
+                <div class="relative h-px flex-1 bg-white/10">
+                    <div
+                        class="absolute inset-y-0 left-0 bg-accent-400 transition-all duration-300"
+                        style:width=move || {
+                            let total = total.get();
+                            let fraction = if total == 0 {
+                                0.0
+                            } else {
+                                answered.get() as f64 / total as f64
+                            };
+                            format!("{}%", fraction * 100.0)
+                        }
+                    ></div>
+                </div>
+                <div class="shrink-0 font-mono text-[11px] tabular-nums text-white/50">
+                    {move || format!("{:02} / {:02} answered", answered.get(), total.get())}
+                </div>
             </div>
-        </Panel>
 
-        <Show
-            when=move || !questions.get().is_empty()
-            fallback=|| view! { <LoadingPanel /> }
-        >
-            <div class="space-y-4">
-                {move || {
-                    questions
-                        .get()
-                        .into_iter()
-                        .enumerate()
-                        .map(|(index, question)| {
-                            let id = question.id.clone();
-                            let selected_id = question.id.clone();
-                            let selected = Signal::derive(move || {
-                                answers.with(|a| a.get(&selected_id).cloned().unwrap_or_default())
-                            });
-                            let on_change = Callback::new(move |choice: String| {
-                                answers.update(|a| {
-                                    a.insert(id.clone(), choice);
+            <Show when=move || !questions.get().is_empty() fallback=|| view! { <Loading /> }>
+                <div class="border-b border-white/10">
+                    {move || {
+                        questions
+                            .get()
+                            .into_iter()
+                            .enumerate()
+                            .map(|(index, question)| {
+                                let id = question.id.clone();
+                                let selected_id = question.id.clone();
+                                let selected = Signal::derive(move || {
+                                    answers.with(|a| a.get(&selected_id).cloned().unwrap_or_default())
                                 });
-                            });
-                            view! {
-                                <Panel
-                                    highlighted=Signal::derive(move || !selected.get().is_empty())
-                                    class="p-5"
-                                >
-                                    <div class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-accent-300/80">
-                                        <span>{format!("{:02}", index + 1)}</span>
-                                        <span class="text-white/30">"·"</span>
-                                        <span>{question.topic.clone()}</span>
-                                    </div>
-                                    <div class="mb-4 text-base font-semibold text-white">
-                                        {question.prompt.clone()}
-                                    </div>
-                                    <div class="space-y-2">
-                                        {question
-                                            .choices
-                                            .iter()
-                                            .map(|choice| {
-                                                view! {
-                                                    <Radio
-                                                        name=question.id.clone()
-                                                        value=choice.id.clone()
-                                                        selected=selected
-                                                        on_change=on_change
-                                                        label=choice.text.clone()
-                                                        class="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 leading-6 hover:border-white/15"
-                                                    />
+                                let on_change = Callback::new(move |choice: String| {
+                                    answers.update(|a| {
+                                        a.insert(id.clone(), choice);
+                                    });
+                                });
+                                view! {
+                                    <div class="grid gap-4 border-t border-white/10 py-6 md:grid-cols-[14rem_1fr] md:gap-8">
+                                        <div class="font-mono text-[11px] tracking-[0.2em] uppercase">
+                                            // The number lights up once the question is answered.
+                                            <span class=move || {
+                                                if selected.get().is_empty() {
+                                                    "text-white/30"
+                                                } else {
+                                                    "text-accent-400/80"
                                                 }
-                                            })
-                                            .collect_view()}
+                                            }>{format!("{:02}", index + 1)}</span>
+                                            <span class="ml-3 text-white/45">
+                                                {question.topic.clone()}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <p class="mb-4 text-base font-medium text-white">
+                                                {question.prompt.clone()}
+                                            </p>
+                                            <div class="space-y-1">
+                                                {question
+                                                    .choices
+                                                    .iter()
+                                                    .map(|choice| {
+                                                        view! {
+                                                            <Radio
+                                                                name=question.id.clone()
+                                                                value=choice.id.clone()
+                                                                selected=selected
+                                                                on_change=on_change
+                                                                label=choice.text.clone()
+                                                                class="w-full rounded-sm px-3 py-2 leading-6 font-light transition-colors hover:bg-white/[0.03]"
+                                                            />
+                                                        }
+                                                    })
+                                                    .collect_view()}
+                                            </div>
+                                        </div>
                                     </div>
-                                </Panel>
-                            }
-                        })
-                        .collect_view()
-                }}
-            </div>
-        </Show>
+                                }
+                            })
+                            .collect_view()
+                    }}
+                </div>
+            </Show>
 
-        <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
-            <Button
-                variant=Variant::Solid
-                icon=icons::ARROW_RIGHT
-                disabled=Signal::derive(move || !complete.get())
-                on_click=on_next
-            >
-                {move || {
-                    if complete.get() {
-                        "Continue".to_string()
-                    } else {
-                        format!("{} left to answer", total.get().saturating_sub(answered.get()))
-                    }
-                }}
-            </Button>
-        </div>
+            <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <Button
+                    variant=Variant::Solid
+                    icon=icons::ARROW_RIGHT
+                    disabled=Signal::derive(move || !complete.get())
+                    on_click=on_next
+                >
+                    {move || {
+                        if complete.get() {
+                            "Continue".to_string()
+                        } else {
+                            format!("{} left to answer", total.get().saturating_sub(answered.get()))
+                        }
+                    }}
+                </Button>
+            </div>
+        </section>
     }
 }
 
@@ -623,115 +682,121 @@ fn OpenStep(
     #[prop(into)] on_next: Callback<()>,
 ) -> impl IntoView {
     view! {
-        <Callout
-            tone=Tone::Info
-            icon=icons::MESSAGE_CIRCLE
-            title="In your own words"
-            class="mb-6"
-        >
-            "This is the part we actually read. Short and specific beats long and general — we are trying to work out whether you would be useful in a bug thread at 1am, not whether you can write."
-        </Callout>
+        <section>
+            <SectionLabel num="02" label="In your own words" />
+            <p class="mb-10 max-w-2xl text-sm leading-relaxed font-light text-white/65">
+                "This is the part we actually read. Short and specific beats long and general — we are trying to work out whether you would be useful in a bug thread at 1am, not whether you can write."
+            </p>
 
-        <div class="space-y-4">
+            <div class="border-b border-white/10">
+                {move || {
+                    questions
+                        .get()
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, question)| {
+                            let id = question.id.clone();
+                            let value_id = question.id.clone();
+                            let value = Signal::derive(move || {
+                                answers.with(|a| a.get(&value_id).cloned().unwrap_or_default())
+                            });
+                            let on_input = Callback::new(move |text: String| {
+                                answers
+                                    .update(|a| {
+                                        a.insert(id.clone(), text);
+                                    });
+                            });
+                            let min_length = question.min_length;
+                            let required = question.required;
+                            view! {
+                                <div class="grid gap-4 border-t border-white/10 py-6 md:grid-cols-[14rem_1fr] md:gap-8">
+                                    <div class="font-mono text-[11px] tracking-[0.2em] uppercase">
+                                        <span class="text-accent-400/80">
+                                            {format!("{:02}", index + 1)}
+                                        </span>
+                                        {(!required)
+                                            .then(|| {
+                                                view! {
+                                                    <span class="ml-3 text-white/40">"Optional"</span>
+                                                }
+                                            })}
+                                    </div>
+                                    <div>
+                                        <p class="mb-3 text-base font-medium text-white">
+                                            {question.prompt.clone()}
+                                        </p>
+                                        <TextArea
+                                            value=value
+                                            on_input=on_input
+                                            rows=5
+                                            placeholder=question.hint.clone().unwrap_or_default()
+                                        />
+                                        <div class="mt-1.5 flex items-center justify-between gap-3 text-xs">
+                                            <span class="font-light text-white/40">
+                                                {question.hint.clone().unwrap_or_default()}
+                                            </span>
+                                            <span class=move || {
+                                                let length = value.get().trim().chars().count();
+                                                cn!(
+                                                    "shrink-0 font-mono text-[11px] tabular-nums",
+                                                    if length >= min_length {
+                                                        "text-white/35"
+                                                    } else {
+                                                        "text-amber-300/70"
+                                                    },
+                                                )
+                                            }>
+                                                {move || {
+                                                    let length = value.get().trim().chars().count();
+                                                    if min_length > 0 && length < min_length {
+                                                        format!("{length} / {min_length}")
+                                                    } else {
+                                                        format!("{length}")
+                                                    }
+                                                }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        })
+                        .collect_view()
+                }}
+            </div>
+
             {move || {
-                questions
+                problem
                     .get()
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, question)| {
-                        let id = question.id.clone();
-                        let value_id = question.id.clone();
-                        let value = Signal::derive(move || {
-                            answers.with(|a| a.get(&value_id).cloned().unwrap_or_default())
-                        });
-                        let on_input = Callback::new(move |text: String| {
-                            answers
-                                .update(|a| {
-                                    a.insert(id.clone(), text);
-                                });
-                        });
-                        let min_length = question.min_length;
-                        let required = question.required;
+                    .map(|message| {
                         view! {
-                            <Panel class="p-5">
-                                <div class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-accent-300/80">
-                                    <span>{format!("{:02}", index + 1)}</span>
-                                    {(!required)
-                                        .then(|| {
-                                            view! {
-                                                <span class="text-white/30">"· optional"</span>
-                                            }
-                                        })}
-                                </div>
-                                <div class="mb-3 text-base font-semibold text-white">
-                                    {question.prompt.clone()}
-                                </div>
-                                <TextArea
-                                    value=value
-                                    on_input=on_input
-                                    rows=5
-                                    placeholder=question.hint.clone().unwrap_or_default()
-                                />
-                                <div class="mt-1.5 flex items-center justify-between gap-3 text-xs">
-                                    <span class="text-white/40">
-                                        {question.hint.clone().unwrap_or_default()}
-                                    </span>
-                                    <span class=move || {
-                                        let length = value.get().trim().chars().count();
-                                        cn!(
-                                            "shrink-0 tabular-nums",
-                                            if length >= min_length {
-                                                "text-white/35"
-                                            } else {
-                                                "text-amber-300/70"
-                                            },
-                                        )
-                                    }>
-                                        {move || {
-                                            let length = value.get().trim().chars().count();
-                                            if min_length > 0 && length < min_length {
-                                                format!("{length} / {min_length}")
-                                            } else {
-                                                format!("{length}")
-                                            }
-                                        }}
-                                    </span>
-                                </div>
-                            </Panel>
+                            <Notice
+                                tone=NOTICE_WARNING
+                                title="Not quite there"
+                                message=message
+                                spacing="mt-6"
+                            />
                         }
                     })
-                    .collect_view()
             }}
-        </div>
 
-        {move || {
-            problem
-                .get()
-                .map(|message| {
-                    view! {
-                        <Alert
-                            tone=Tone::Warning
-                            title="Not quite there"
-                            description=message
-                            class="mt-4"
-                        />
-                    }
-                })
-        }}
-
-        <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-between">
-            <Button variant=Variant::Glass icon=icons::ARROW_LEFT on_click=on_back>
-                "Back to the questions"
-            </Button>
-            <Button
-                variant=Variant::Solid
-                icon=icons::ARROW_RIGHT
-                disabled=Signal::derive(move || !ready.get())
-                on_click=on_next
-            >
-                "Continue to your details"
-            </Button>
-        </div>
+            <div class="mt-8 flex flex-col-reverse gap-6 sm:flex-row sm:items-center sm:justify-between">
+                <button type="button" on:click=move |_| on_back.run(()) class=BACK_LINK>
+                    <Icon
+                        icon=icons::ARROW_LEFT
+                        class="h-4 w-4 transition-transform group-hover:-translate-x-0.5"
+                    />
+                    "Back to the questions"
+                </button>
+                <Button
+                    variant=Variant::Solid
+                    icon=icons::ARROW_RIGHT
+                    disabled=Signal::derive(move || !ready.get())
+                    on_click=on_next
+                >
+                    "Continue to your details"
+                </Button>
+            </div>
+        </section>
     }
 }
 
@@ -748,11 +813,12 @@ fn DetailsStep(
     #[prop(into)] on_next: Callback<()>,
 ) -> impl IntoView {
     view! {
-        <Panel class="p-6">
-            <div class="mb-5 flex items-center gap-3">
-                <Icon icon=icons::USER class="h-5 w-5 text-accent-400" />
-                <h2 class="text-xl font-bold">"How we reach you"</h2>
-            </div>
+        <section>
+            <SectionLabel num="03" label="Your details" />
+            <h2 class="mb-8 text-3xl font-extralight tracking-tight md:text-4xl">
+                "How we "
+                <span class="font-semibold">"reach you"</span>
+            </h2>
 
             <div class="grid gap-4 md:grid-cols-2">
                 <Field label="Name" required=true>
@@ -803,39 +869,43 @@ fn DetailsStep(
                     placeholder="I've flown the DC-10 in every sim that's had one and I know the systems well enough to tell you which one is misbehaving. I file reports with steps, expected vs actual, and a log…"
                 />
             </Field>
-            <div class="mt-1 text-right text-xs tabular-nums text-white/35">
+            <div class="mt-1 text-right font-mono text-[11px] tabular-nums text-white/35">
                 {move || format!("{} characters", why_you.get().trim().chars().count())}
             </div>
-        </Panel>
 
-        {move || {
-            problem
-                .get()
-                .map(|message| {
-                    view! {
-                        <Alert
-                            tone=Tone::Warning
-                            title="Not quite there"
-                            description=message
-                            class="mt-4"
-                        />
-                    }
-                })
-        }}
+            {move || {
+                problem
+                    .get()
+                    .map(|message| {
+                        view! {
+                            <Notice
+                                tone=NOTICE_WARNING
+                                title="Not quite there"
+                                message=message
+                                spacing="mt-6"
+                            />
+                        }
+                    })
+            }}
 
-        <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-between">
-            <Button variant=Variant::Glass icon=icons::ARROW_LEFT on_click=on_back>
-                "Back to the questions"
-            </Button>
-            <Button
-                variant=Variant::Solid
-                icon=icons::ARROW_RIGHT
-                disabled=Signal::derive(move || !ready.get())
-                on_click=on_next
-            >
-                "Review"
-            </Button>
-        </div>
+            <div class="mt-8 flex flex-col-reverse gap-6 sm:flex-row sm:items-center sm:justify-between">
+                <button type="button" on:click=move |_| on_back.run(()) class=BACK_LINK>
+                    <Icon
+                        icon=icons::ARROW_LEFT
+                        class="h-4 w-4 transition-transform group-hover:-translate-x-0.5"
+                    />
+                    "Back to the questions"
+                </button>
+                <Button
+                    variant=Variant::Solid
+                    icon=icons::ARROW_RIGHT
+                    disabled=Signal::derive(move || !ready.get())
+                    on_click=on_next
+                >
+                    "Review"
+                </Button>
+            </div>
+        </section>
     }
 }
 
@@ -854,13 +924,14 @@ fn ReviewStep(
     #[prop(into)] on_submit: Callback<()>,
 ) -> impl IntoView {
     view! {
-        <Panel class="p-6">
-            <div class="mb-5 flex items-center gap-3">
-                <Icon icon=icons::CIRCLE_CHECK class="h-5 w-5 text-accent-400" />
-                <h2 class="text-xl font-bold">"Check it over"</h2>
-            </div>
+        <section>
+            <SectionLabel num="04" label="Review" />
+            <h2 class="mb-8 text-3xl font-extralight tracking-tight md:text-4xl">
+                "Check it "
+                <span class="font-semibold">"over"</span>
+            </h2>
 
-            <div class="grid gap-3 sm:grid-cols-2">
+            <dl class="border-t border-white/10">
                 <ReviewRow label="Name" value=Signal::derive(move || display_name.get()) />
                 <ReviewRow label="Email" value=Signal::derive(move || email.get()) />
                 <ReviewRow label="Discord" value=Signal::derive(move || discord.get()) />
@@ -871,68 +942,69 @@ fn ReviewStep(
                         format!("{} of {} answered", answered.get(), total.get())
                     })
                 />
-            </div>
-
-            <div class="mt-5">
-                <div class="mb-1.5 text-xs font-medium uppercase tracking-[0.14em] text-white/50">
-                    "Why you"
+                <div class=SPEC_ROW>
+                    <dt class=SPEC_LABEL>"Why you"</dt>
+                    <dd class="max-h-56 overflow-y-auto text-sm leading-6 font-light whitespace-pre-wrap text-white/75">
+                        {move || why_you.get()}
+                    </dd>
                 </div>
-                <Well class="max-h-56 overflow-y-auto p-4 text-sm leading-6 whitespace-pre-wrap text-white/75">
-                    {move || why_you.get()}
-                </Well>
+            </dl>
+
+            <Note label="What happens next">
+                "We grade the questionnaire and read every application. If you're selected you'll hear from us on Discord or email, and this page will switch over to the NDA and beta agreement for you to sign."
+            </Note>
+
+            {move || {
+                failure
+                    .get()
+                    .map(|message| {
+                        view! {
+                            <Notice
+                                tone=NOTICE_ERROR
+                                title="Not submitted"
+                                message=message
+                                spacing="mt-6"
+                            />
+                        }
+                    })
+            }}
+
+            <div class="mt-8 flex flex-col-reverse gap-6 sm:flex-row sm:items-center sm:justify-between">
+                <button
+                    type="button"
+                    disabled=move || sending.get()
+                    on:click=move |_| on_back.run(())
+                    class=BACK_LINK
+                >
+                    <Icon
+                        icon=icons::ARROW_LEFT
+                        class="h-4 w-4 transition-transform group-hover:-translate-x-0.5"
+                    />
+                    "Back"
+                </button>
+                <Button
+                    variant=Variant::Solid
+                    icon=icons::CIRCLE_CHECK
+                    loading=sending
+                    on_click=on_submit
+                >
+                    "Submit application"
+                </Button>
             </div>
 
-            <Callout tone=Tone::Neutral icon=icons::SHIELD title="What happens next" class="mt-5">
-                "We grade the questionnaire and read every application. If you're selected you'll hear from us on Discord or email, and this page will switch over to the NDA and beta agreement for you to sign."
-            </Callout>
-        </Panel>
-
-        {move || {
-            failure
-                .get()
-                .map(|message| {
-                    view! {
-                        <Alert
-                            tone=Tone::Danger
-                            title="Not submitted"
-                            description=message
-                            class="mt-4"
-                        />
-                    }
-                })
-        }}
-
-        <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-between">
-            <Button
-                variant=Variant::Glass
-                icon=icons::ARROW_LEFT
-                disabled=sending
-                on_click=on_back
-            >
-                "Back"
-            </Button>
-            <Button
-                variant=Variant::Solid
-                icon=icons::CIRCLE_CHECK
-                loading=sending
-                on_click=on_submit
-            >
-                "Submit application"
-            </Button>
-        </div>
-
-        <p class="mt-4 text-xs leading-relaxed text-white/40">
-            "Applying doesn't guarantee a place. We're keeping the group small so the feedback loop stays tight."
-        </p>
+            <p class="mt-6 text-xs leading-relaxed font-light text-white/40">
+                "Applying doesn't guarantee a place. We're keeping the group small so the feedback loop stays tight."
+            </p>
+        </section>
     }
 }
 
 #[component]
 fn ReviewRow(#[prop(into)] label: String, #[prop(into)] value: Signal<String>) -> impl IntoView {
     view! {
-        <div class="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
-            <div class="text-[11px] uppercase tracking-[0.14em] text-white/40">{label}</div>
-            <div class="mt-0.5 truncate text-sm text-white/85">{move || value.get()}</div>
+        <div class=SPEC_ROW>
+            <dt class=SPEC_LABEL>{label}</dt>
+            <dd class="truncate text-sm font-light text-white/80">{move || value.get()}</dd>
         </div>
     }
 }
@@ -942,22 +1014,20 @@ fn UnderReview(state: BetaState) -> impl IntoView {
     let reference = state.application_id.clone();
     let score = state.score;
     view! {
-        <Panel class="p-8">
-            <div class="mb-4 flex items-center gap-3">
-                <div class="flex h-11 w-11 items-center justify-center rounded-2xl border border-sky-400/30 bg-sky-500/10">
-                    <Icon icon=icons::CLOCK class="h-5 w-5 text-sky-300" />
-                </div>
-                <div>
-                    <h2 class="text-xl font-bold">"Application received"</h2>
-                    <div class="text-sm text-white/50">"We're reading it."</div>
-                </div>
-            </div>
+        <section>
+            <SectionLabel num="01" label="Your application" />
+            <p class=cn!(STATUS, "text-accent-300")>"Under review"</p>
+            <h2 class="text-3xl font-extralight tracking-tight md:text-4xl">
+                "Application "
+                <span class="font-semibold">"received"</span>
+            </h2>
+            <p class="mt-2 font-light text-white/50">"We're reading it."</p>
 
-            <p class="mb-5 max-w-xl text-sm leading-relaxed text-white/70">
+            <p class="mt-6 mb-10 max-w-xl border-l border-accent-400/40 pl-5 text-sm leading-relaxed font-light text-white/65">
                 "If you're selected we'll reach out on Discord or by email, and this page will switch over to the NDA and beta agreement for you to sign. Nothing else to do for now."
             </p>
 
-            <div class="grid gap-3 sm:grid-cols-2">
+            <dl class="border-t border-white/10">
                 {reference
                     .map(|id| {
                         view! { <ReviewRow label="Reference" value=Signal::derive(move || id.clone()) /> }
@@ -966,8 +1036,8 @@ fn UnderReview(state: BetaState) -> impl IntoView {
                     .map(|score| {
                         view! { <ScoreRow score=score /> }
                     })}
-            </div>
-        </Panel>
+            </dl>
+        </section>
     }
 }
 
@@ -980,25 +1050,25 @@ fn ScoreRow(score: QuizScore) -> impl IntoView {
 #[component]
 fn NotSelected(note: Option<String>) -> impl IntoView {
     view! {
-        <Panel class="p-8">
-            <div class="mb-4 flex items-center gap-3">
-                <div class="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
-                    <Icon icon=icons::CIRCLE_X class="h-5 w-5 text-white/50" />
-                </div>
-                <h2 class="text-xl font-bold">"Not selected this time"</h2>
-            </div>
-            <p class="max-w-xl text-sm leading-relaxed text-white/70">
+        <section>
+            <SectionLabel num="01" label="Your application" />
+            <p class=cn!(STATUS, "text-white/50")>"Closed"</p>
+            <h2 class="mb-6 text-3xl font-extralight tracking-tight md:text-4xl">
+                "Not selected "
+                <span class="font-semibold">"this time"</span>
+            </h2>
+            <p class="max-w-xl border-l border-white/20 pl-5 text-sm leading-relaxed font-light text-white/65">
                 "We had more good applications than places. This isn't a judgement on you, and it doesn't rule you out of a later test round."
             </p>
             {note
                 .map(|note| {
                     view! {
-                        <Well class="mt-5 p-4 text-sm leading-6 whitespace-pre-wrap text-white/70">
+                        <p class="mt-8 max-w-2xl border-t border-white/10 pt-5 text-sm leading-6 font-light whitespace-pre-wrap text-white/70">
                             {note}
-                        </Well>
+                        </p>
                     }
                 })}
-        </Panel>
+        </section>
     }
 }
 
@@ -1009,36 +1079,42 @@ fn Paperwork(state: BetaState, go: Callback<String>) -> impl IntoView {
     let documents = state.documents.clone();
 
     view! {
-        <div class="mb-6">
-            <Alert
-                tone=Tone::Info
-                title=if complete {
+        <section class="mb-20">
+            <SectionLabel num="01" label="Your application" />
+            <p class=cn!(STATUS, if complete { "text-amber-300" } else { "text-accent-300" })>
+                {if complete { "Final check" } else { "Accepted" }}
+            </p>
+            <h2 class="max-w-3xl text-3xl font-extralight tracking-tight md:text-4xl">
+                {if complete {
                     "Paperwork received — final check"
                 } else {
                     "Your application was accepted. Two documents to sign."
-                }
-                description=if complete {
+                }}
+            </h2>
+            <p class="mt-6 max-w-xl border-l border-accent-400/40 pl-5 text-sm leading-relaxed font-light text-white/65">
+                {if complete {
                     "Both documents are signed and with us. We check them over and then release your build — nothing else for you to do."
-                        .to_string()
                 } else {
                     "Read and e-sign both below. Once they're in we do a final check and then you're a tester."
-                        .to_string()
-                }
-            />
-        </div>
+                }}
+            </p>
+        </section>
 
-        <div class="space-y-4">
-            {documents
-                .into_iter()
-                .map(|doc| {
-                    view! { <DocumentCard doc=doc go=go /> }
-                })
-                .collect_view()}
-        </div>
+        <section>
+            <SectionLabel num="02" label="Documents" />
+            <div class="border-b border-white/10">
+                {documents
+                    .into_iter()
+                    .map(|doc| {
+                        view! { <DocumentRow doc=doc go=go /> }
+                    })
+                    .collect_view()}
+            </div>
 
-        <Callout tone=Tone::Neutral icon=icons::SHIELD title="Before you sign" class="mt-6">
-            "Read them properly — the NDA is what stops the aircraft leaking before release, and it binds you. If anything in either document doesn't work for you, tell us before signing rather than after."
-        </Callout>
+            <Note label="Before you sign">
+                "Read them properly — the NDA is what stops the aircraft leaking before release, and it binds you. If anything in either document doesn't work for you, tell us before signing rather than after."
+            </Note>
+        </section>
     }
 }
 
@@ -1049,107 +1125,107 @@ fn Approved(state: BetaState, go: Callback<String>) -> impl IntoView {
     let documents = StoredValue::new(state.documents.clone());
 
     view! {
-        <Panel class="mb-6 p-8">
-            <div class="mb-4 flex items-center gap-3">
-                <div class="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-400/30 bg-emerald-500/10">
-                    <Icon icon=icons::CIRCLE_CHECK class="h-6 w-6 text-emerald-300" />
-                </div>
-                <div>
-                    <h2 class="text-2xl font-bold">"You're a DC-10 beta tester"</h2>
-                    <div class="text-sm text-white/50">
-                        "Paperwork checked and your account is entitled."
-                    </div>
-                </div>
-            </div>
+        <section class="mb-20">
+            <SectionLabel num="01" label="Your application" />
+            <p class=cn!(STATUS, "text-accent-300")>"Approved"</p>
+            <h2 class="text-3xl font-extralight tracking-tight md:text-5xl">
+                "You're a DC-10 "
+                <span class="font-semibold text-accent-300">"beta tester"</span>
+            </h2>
+            <p class="mt-3 font-light text-white/50">
+                "Paperwork checked and your account is entitled."
+            </p>
 
-            <p class="max-w-xl text-sm leading-relaxed text-white/70">
+            <p class="mt-6 max-w-xl border-l border-accent-400/40 pl-5 text-sm leading-relaxed font-light text-white/65">
                 "The build shows up in the Infinity Manager under the beta channel. If it is not there yet, sign out and back in once — your entitlement is baked into the token."
             </p>
 
-            <Callout tone=Tone::Warning icon=icons::SHIELD title="The NDA is live" class="mt-5">
-                "No screenshots, no video, no streaming, nothing outside the tester channels. That holds until we say otherwise in writing."
-            </Callout>
-        </Panel>
+            <Notice
+                tone=NOTICE_WARNING
+                title="The NDA is live"
+                message="No screenshots, no video, no streaming, nothing outside the tester channels. That holds until we say otherwise in writing."
+                spacing="mt-8 max-w-xl"
+            />
+        </section>
 
         <Show when=move || !documents.with_value(Vec::is_empty)>
-            <div class="mb-3 text-xs font-medium uppercase tracking-[0.14em] text-white/40">
-                "Your signed documents"
-            </div>
-            <div class="space-y-4">
-                {documents
-                    .get_value()
-                    .into_iter()
-                    .map(|doc| view! { <DocumentCard doc=doc go=go /> })
-                    .collect_view()}
-            </div>
+            <section>
+                <SectionLabel num="02" label="Your signed documents" />
+                <div class="border-b border-white/10">
+                    {documents
+                        .get_value()
+                        .into_iter()
+                        .map(|doc| view! { <DocumentRow doc=doc go=go /> })
+                        .collect_view()}
+                </div>
+            </section>
         </Show>
     }
 }
 
+/// One document, as a clickable row out to its e-signing page.
 #[component]
-fn DocumentCard(doc: BetaDocumentState, go: Callback<String>) -> impl IntoView {
+fn DocumentRow(doc: BetaDocumentState, go: Callback<String>) -> impl IntoView {
     let signed = doc.signed;
     let target = nav::beta_sign(&doc.id);
     let superseded = doc.superseded_version.clone();
 
     view! {
-        <Panel class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
-            <div class=cn!(
-                "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border",
-                if signed {
-                    "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
-                } else {
-                    "border-white/10 bg-white/5 text-accent-400"
-                },
-            )>
-                <Icon
-                    icon=if signed { icons::CIRCLE_CHECK } else { icons::FILE_TEXT }
-                    class="h-5 w-5"
-                />
-            </div>
-
-            <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-center gap-2">
-                    <span class="font-semibold text-white">{doc.title.clone()}</span>
-                    <Badge tone=Tone::Neutral size=Size::Xs>{format!("v{}", doc.version)}</Badge>
+        <button
+            type="button"
+            on:click=move |_| go.run(target.clone())
+            class="group relative grid w-full gap-3 border-t border-white/10 py-6 text-left transition-colors hover:bg-white/[0.03] md:grid-cols-[1fr_auto] md:items-center md:gap-8"
+        >
+            <HoverRule />
+            <div class="min-w-0">
+                <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                    <h3 class="text-lg font-medium">{doc.title.clone()}</h3>
+                    <span class="font-mono text-[11px] text-white/40">
+                        {format!("v{}", doc.version)}
+                    </span>
                     {signed
                         .then(|| {
                             view! {
-                                <Badge tone=Tone::Accent size=Size::Xs icon=icons::CHECK>
+                                <span class="font-mono text-[11px] tracking-[0.2em] text-accent-300 uppercase">
                                     "Signed"
-                                </Badge>
+                                </span>
                             }
                         })}
                 </div>
-                <p class="mt-1 text-sm leading-relaxed text-white/60">{doc.summary.clone()}</p>
+                <p class="mt-1 max-w-2xl text-sm leading-relaxed font-light text-white/55">
+                    {doc.summary.clone()}
+                </p>
                 {doc
                     .signed_at
                     .clone()
                     .map(|at| {
                         view! {
-                            <div class="mt-1 text-xs text-white/40">{format!("Signed {at}")}</div>
+                            <p class="mt-2 font-mono text-[11px] text-white/40">
+                                {format!("Signed {at}")}
+                            </p>
                         }
                     })}
                 {superseded
                     .map(|old| {
                         view! {
-                            <div class="mt-1 text-xs text-amber-300/80">
+                            <p class="mt-2 border-l border-amber-400/60 pl-3 text-xs text-amber-200/90">
                                 {format!(
                                     "You signed v{old}. This document has been updated — please sign the current version.",
                                 )}
-                            </div>
+                            </p>
                         }
                     })}
             </div>
-
-            <Button
-                variant=if signed { Variant::Glass } else { Variant::Solid }
-                icon=if signed { icons::EYE } else { icons::PENCIL }
-                on_click=nav::go_to(go, target)
-                class="shrink-0"
-            >
+            <span class=cn!(
+                "inline-flex shrink-0 items-center gap-2 text-sm font-medium",
+                if signed { "text-white/60" } else { "text-accent-300" },
+            )>
                 {if signed { "View" } else { "Read and sign" }}
-            </Button>
-        </Panel>
+                <Icon
+                    icon=icons::ARROW_RIGHT
+                    class="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"
+                />
+            </span>
+        </button>
     }
 }

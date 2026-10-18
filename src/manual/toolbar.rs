@@ -8,8 +8,9 @@ use super::shared::{
     move_focus, use_dismiss, use_manual,
 };
 use super::types::AircraftName;
+use crate::components::EYEBROW;
 
-const ICON_BUTTON: &str = "inline-flex min-w-10 shrink-0 items-center justify-center gap-2 px-3";
+const ICON_BUTTON: &str = "inline-flex min-w-10 shrink-0 items-center justify-center gap-2 px-2";
 
 /// The sticky bar: chapter menu, aircraft buttons, the narrow-screen Contents
 /// button, and search.
@@ -38,7 +39,7 @@ pub fn Toolbar(
 
     view! {
         <div class=cn!(
-            "sticky top-[var(--manual-top)] z-20 flex h-[var(--manual-bar)] items-center gap-2 border-b border-white/[0.08] bg-[rgba(4,9,11,0.9)] px-4 backdrop-blur-[24px] md:gap-3 md:px-6",
+            "sticky top-[var(--manual-top)] z-20 flex h-[var(--manual-bar)] items-center gap-2 border-b border-white/10 bg-[rgba(4,9,11,0.9)] px-4 backdrop-blur-[24px] md:gap-6 md:px-8",
             (ctx.manual.aircraft.len() > 1).then_some("flex-wrap content-center gap-y-2 md:flex-nowrap"),
         )>
             <ChapterMenu
@@ -71,8 +72,8 @@ pub fn Toolbar(
                         panel.set(if sections_open() { None } else { Some(Panel::Sections) })
                     }
                 >
-                    <Icon icon=LIST class="h-4 w-4 text-accent-400" />
-                    <span class="hidden sm:inline">"Contents"</span>
+                    <Icon icon=LIST class="h-3.5 w-3.5 text-accent-400" />
+                    <span class=cn!("hidden sm:inline", EYEBROW)>"Contents"</span>
                 </button>
             </Show>
             <SearchBox
@@ -95,7 +96,7 @@ fn AircraftPicker(on_change: Callback<AircraftName>) -> impl IntoView {
     let group = use_id("manual-aircraft");
     (ctx.manual.aircraft.len() > 1).then(|| {
         view! {
-            <fieldset class="order-first flex h-10 min-w-0 flex-[1_0_100%] gap-[0.1875rem] rounded-2xl border border-white/10 bg-black/20 p-[0.1875rem] md:order-none md:flex-none">
+            <fieldset class="order-first flex h-10 min-w-0 flex-[1_0_100%] gap-5 border-b border-white/15 md:order-none md:flex-none">
                 <legend class="sr-only">"Aircraft"</legend>
                 {ctx
                     .manual
@@ -107,12 +108,12 @@ fn AircraftPicker(on_change: Callback<AircraftName>) -> impl IntoView {
                         view! {
                             <label class=move || {
                                 cn!(
-                                    "relative flex flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-xl px-3.5 text-[0.8125rem] font-semibold tracking-[0.02em] transition-colors duration-150 md:flex-none",
+                                    "relative -mb-px flex flex-1 cursor-pointer items-center justify-center whitespace-nowrap border-b font-mono text-[11px] tracking-[0.25em] uppercase transition-colors duration-150 md:flex-none",
                                     "has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent-400",
                                     if picked() {
-                                        "bg-accent-400/[0.16] text-accent-200 shadow-[inset_0_0_0_1px_rgb(var(--ac-400)/0.32)]"
+                                        "border-accent-400 text-white"
                                     } else {
-                                        "text-white/[0.58] hover:bg-white/5 hover:text-white"
+                                        "border-transparent text-white/50 hover:text-white/85"
                                     },
                                 )
                             }>
@@ -245,7 +246,7 @@ fn ChapterMenu(
         >
             <span
                 id=label_id.clone()
-                class="hidden shrink-0 text-xs font-medium uppercase tracking-[0.18em] text-white/35 min-[1100px]:block"
+                class=cn!("hidden shrink-0 min-[1100px]:block", EYEBROW)
             >
                 {ctx.chapter_label}
             </span>
@@ -258,7 +259,7 @@ fn ChapterMenu(
                         cn!(
                             CONTROL,
                             FOCUS,
-                            "flex w-full items-center justify-between gap-3 px-4 text-left",
+                            "flex w-full items-center justify-between gap-3 px-1 text-left",
                             if open.get() { CONTROL_OPEN } else { CONTROL_IDLE },
                         )
                     }
@@ -275,7 +276,7 @@ fn ChapterMenu(
                             open.get().then_some("rotate-180"),
                         )
                     }>
-                        <Icon icon=icons::CHEVRON_DOWN class="h-4 w-4" />
+                        <Icon icon=icons::CHEVRON_DOWN class="h-3.5 w-3.5" />
                     </span>
                 </button>
                 <Show when=move || open.get()>
@@ -284,7 +285,7 @@ fn ChapterMenu(
                         node_ref=list
                         class=cn!(
                             POPOVER,
-                            "absolute top-[calc(100%_+_0.5rem)] left-0 z-30 flex max-h-[min(26rem,calc(100vh_-_var(--manual-top)_-_var(--manual-bar)_-_2rem))] w-[max(100%,18rem)] list-none flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-[1.375rem] p-2",
+                            "absolute top-[calc(100%_+_0.5rem)] left-0 z-30 flex max-h-[min(26rem,calc(100vh_-_var(--manual-top)_-_var(--manual-bar)_-_2rem))] w-[max(100%,18rem)] list-none flex-col overflow-y-auto overscroll-contain py-2",
                         )
                         on:keydown=on_list_key
                     >
@@ -296,31 +297,23 @@ fn ChapterMenu(
                                         <li>
                                             <a
                                                 class=cn!(
-                                                    "flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm transition-colors duration-150",
+                                                    "flex items-baseline gap-3 border-l px-4 py-2 text-sm transition-colors duration-150",
                                                     FOCUS,
                                                     if is_current {
-                                                        "border-accent-400/20 bg-accent-400/15 text-accent-200"
+                                                        "border-accent-400 text-white"
                                                     } else {
-                                                        "border-transparent text-white/70 hover:bg-white/5 hover:text-white focus-visible:bg-white/5 focus-visible:text-white"
+                                                        "border-transparent font-light text-white/60 hover:bg-white/[0.03] hover:text-white focus-visible:bg-white/[0.03] focus-visible:text-white"
                                                     },
                                                 )
                                                 href=href.clone()
                                                 on:click=ctx.on_link(href)
                                                 aria-current=is_current.then_some("page")
                                             >
-                                                <span class="min-w-4 shrink-0 text-xs font-semibold tabular-nums text-accent-400/90">
-                                                    {number}
-                                                </span>
+                                                <span class=cn!(
+                                                    "min-w-5 shrink-0 font-mono text-[10px] tabular-nums",
+                                                    if is_current { "text-accent-400" } else { "text-white/30" },
+                                                )>{number}</span>
                                                 <span class="min-w-0 flex-1 truncate">{title}</span>
-                                                {is_current
-                                                    .then(|| {
-                                                        view! {
-                                                            <Icon
-                                                                icon=icons::CHECK
-                                                                class="h-4 w-4 shrink-0 text-accent-400"
-                                                            />
-                                                        }
-                                                    })}
                                             </a>
                                         </li>
                                     }
@@ -418,7 +411,7 @@ fn SearchBox(
                 aria-controls=panel_id.clone()
                 on:click=move |_| if open.get_untracked() { on_close.run(()) } else { on_open.run(()) }
             >
-                <Icon icon=icons::SEARCH class="h-4 w-4 text-accent-400" />
+                <Icon icon=icons::SEARCH class="h-3.5 w-3.5 text-accent-400" />
             </button>
             <div
                 id=panel_id.clone()
@@ -430,12 +423,12 @@ fn SearchBox(
                     )
                 }
             >
-                <label class="flex h-10 cursor-text items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-3.5 text-accent-400 focus-within:border-accent-400/45">
+                <label class="flex h-10 cursor-text items-center gap-2.5 border-b border-white/15 px-1 text-white/40 transition-colors focus-within:border-accent-400/60 focus-within:text-accent-400">
                     <Icon icon=icons::SEARCH class="h-3.5 w-3.5" />
                     <input
                         node_ref=input
                         type="search"
-                        class="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-white outline-none placeholder:text-white/40"
+                        class="min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-xs text-white outline-none placeholder:text-white/30"
                         prop:value=move || query.get()
                         placeholder="Search the manual"
                         aria-label="Search the manual"
@@ -493,10 +486,10 @@ fn SearchResults(
     view! {
         <div class=cn!(
             "mt-3 max-h-[calc(100vh_-_var(--manual-top)_-_var(--manual-bar)_-_6rem)] overflow-y-auto overscroll-contain",
-            "min-[1100px]:absolute min-[1100px]:top-[calc(100%_+_0.5rem)] min-[1100px]:right-0 min-[1100px]:z-30 min-[1100px]:mt-0 min-[1100px]:max-h-[min(32rem,calc(100vh_-_var(--manual-top)_-_var(--manual-bar)_-_2rem))] min-[1100px]:w-[28rem] min-[1100px]:rounded-[1.375rem] min-[1100px]:p-2",
-            "min-[1100px]:border min-[1100px]:border-white/10 min-[1100px]:bg-[rgb(6,14,16)] min-[1100px]:shadow-[0_16px_48px_rgba(0,0,0,0.5)]",
+            "min-[1100px]:absolute min-[1100px]:top-[calc(100%_+_0.5rem)] min-[1100px]:right-0 min-[1100px]:z-30 min-[1100px]:mt-0 min-[1100px]:max-h-[min(32rem,calc(100vh_-_var(--manual-top)_-_var(--manual-bar)_-_2rem))] min-[1100px]:w-[28rem] min-[1100px]:rounded-sm min-[1100px]:py-2",
+            "min-[1100px]:border min-[1100px]:border-white/10 min-[1100px]:bg-[rgb(5,9,11)]",
         )>
-            <p class="mb-1 px-2.5 text-xs text-white/40" aria-live="polite">
+            <p class=cn!("mb-2 px-4", EYEBROW) aria-live="polite">
                 {move || {
                     let count = hits.with(Vec::len);
                     if count == 1 { "1 match".to_string() } else { format!("{count} matches") }
@@ -524,16 +517,16 @@ fn SearchResults(
                                 <li>
                                     <a
                                         class=cn!(
-                                            "flex flex-col gap-0.5 rounded-[0.875rem] px-2.5 py-2 text-white/[0.58] hover:bg-white/5 focus-visible:bg-white/5",
+                                            "flex flex-col gap-1 border-t border-white/[0.06] px-4 py-3 font-light text-white/55 transition-colors hover:bg-white/[0.03] focus-visible:bg-white/[0.03]",
                                             FOCUS,
                                         )
                                         href=href.clone()
                                         on:click=ctx.on_link(href)
                                     >
-                                        <span class="text-[0.6875rem] uppercase tracking-[0.08em] text-white/40">
+                                        <span class="font-mono text-[10px] tracking-[0.2em] text-white/40 uppercase">
                                             {path}
                                         </span>
-                                        <span class="text-sm font-medium text-white">
+                                        <span class="text-sm font-normal text-white">
                                             {highlighted(&title, &terms)}
                                         </span>
                                         {snippet
@@ -561,7 +554,7 @@ fn highlighted(text: &str, terms: &[String]) -> AnyView {
         .map(|(hit, part)| {
             if hit {
                 view! {
-                    <mark class="rounded-[0.2rem] bg-accent-400/[0.28] px-[0.1em] text-white">
+                    <mark class="bg-accent-400/25 px-[0.1em] text-white">
                         {part.to_string()}
                     </mark>
                 }

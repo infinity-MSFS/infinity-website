@@ -12,11 +12,14 @@ mod io;
 mod map_view;
 mod network;
 mod nvg;
+mod page;
 mod planned_route;
 mod prose;
 mod simconnect;
 mod vars;
 mod vfx;
+
+pub use page::DocArticle;
 
 const CATEGORY_ORDER: [&str; 3] = ["Guide", "Reference", "Modules"];
 

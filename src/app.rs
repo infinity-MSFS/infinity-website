@@ -135,7 +135,7 @@ fn SiteNav() -> impl IntoView {
 }
 
 const FOOTER_LINK: &str =
-    "text-white/50 underline-offset-4 transition-colors hover:text-white/80 hover:underline";
+    "font-mono text-[11px] tracking-[0.2em] text-white/45 uppercase transition-colors hover:text-accent-300";
 
 /// Site-wide footer, and the only place the legal pages are reachable from
 /// every route. The nav deliberately doesn't carry them: they aren't
@@ -146,34 +146,40 @@ const FOOTER_LINK: &str =
 #[component]
 fn SiteFooter() -> impl IntoView {
     view! {
-        <footer class="relative z-10 mt-16 shrink-0 border-t border-white/10 bg-black/20 backdrop-blur-sm">
-            <div class="mx-auto max-w-6xl px-6 py-8 text-xs md:px-8">
-                <nav class="flex flex-wrap items-center gap-x-5 gap-y-2">
-                    <a href=nav::LEGAL_REFUNDS class=FOOTER_LINK>
-                        "Refund Policy"
+        <footer class="relative z-10 mt-16 shrink-0 border-t border-white/10">
+            <div class="mx-auto max-w-6xl px-6 py-8 md:px-10">
+                <div class="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                    <a href=nav::HOME class="flex items-center gap-2.5 text-white/80 transition-colors hover:text-white">
+                        <InfinityMark class="h-5 w-5" glow="none" />
+                        <span class="text-sm font-extralight tracking-[0.2em] uppercase">"Infinity"</span>
                     </a>
-                    <a href=nav::LEGAL_PRIVACY class=FOOTER_LINK>
-                        "Privacy"
-                    </a>
-                    <a href=nav::LEGAL_TERMS class=FOOTER_LINK>
-                        "Terms"
-                    </a>
-                    <a href=nav::AIRCRAFT class=FOOTER_LINK>
-                        "Aircraft"
-                    </a>
-                    <a
-                        href=nav::DISCORD_URL
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class=FOOTER_LINK
-                    >
-                        "Discord"
-                    </a>
-                </nav>
-                <p class="mt-5 text-white/40">
+                    <nav class="flex flex-wrap items-center gap-x-6 gap-y-2">
+                        <a href=nav::LEGAL_REFUNDS class=FOOTER_LINK>
+                            "Refund Policy"
+                        </a>
+                        <a href=nav::LEGAL_PRIVACY class=FOOTER_LINK>
+                            "Privacy"
+                        </a>
+                        <a href=nav::LEGAL_TERMS class=FOOTER_LINK>
+                            "Terms"
+                        </a>
+                        <a href=nav::AIRCRAFT class=FOOTER_LINK>
+                            "Aircraft"
+                        </a>
+                        <a
+                            href=nav::DISCORD_URL
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class=FOOTER_LINK
+                        >
+                            "Discord"
+                        </a>
+                    </nav>
+                </div>
+                <p class="mt-6 border-t border-white/5 pt-5 text-xs font-light text-white/35">
                     {format!("© {COPYRIGHT_YEAR} {PUBLISHER}. All rights reserved.")}
                 </p>
-                <p class="mt-1 text-white/30">
+                <p class="mt-1 text-xs font-light text-white/35">
                     {format!(
                         "Microsoft Flight Simulator is a trademark of Microsoft Corporation. {PUBLISHER} is not affiliated with, endorsed by, or sponsored by Microsoft Corporation.",
                     )}

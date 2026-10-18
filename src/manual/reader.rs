@@ -587,7 +587,7 @@ pub fn ManualReader(
         <div
             node_ref=root
             class=cn!(
-                "manual relative text-white/[0.76]",
+                "manual relative text-white/70",
                 (manual.aircraft.len() > 1).then_some("manual-aircraft"),
             )
         >
@@ -604,9 +604,9 @@ pub fn ManualReader(
                 sections_id=sections_id.clone()
                 sections_toggle=sections_toggle
             />
-            <div class="flex flex-col gap-6 px-4 pt-5 pb-12 md:px-6 md:pt-6 md:pb-16 min-[1100px]:flex-row min-[1100px]:items-start min-[1100px]:px-8">
+            <div class="mx-auto flex w-full max-w-7xl flex-col gap-10 px-4 pt-10 pb-16 md:px-8 md:pt-14 md:pb-24 min-[1100px]:flex-row min-[1100px]:items-start min-[1100px]:gap-14">
                 {contents}
-                <div class="flex min-w-0 flex-1 flex-col gap-6">{page}</div>
+                <div class="flex min-w-0 flex-1 flex-col gap-16 md:gap-20">{page}</div>
             </div>
         </div>
     }

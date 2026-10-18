@@ -2,7 +2,7 @@ use infinity_ui::prelude::*;
 
 #[component]
 pub fn Grid2(children: Children) -> impl IntoView {
-    view! { <div class="grid gap-4 md:grid-cols-2">{children()}</div> }
+    view! { <div class="grid gap-x-10 md:grid-cols-2">{children()}</div> }
 }
 
 #[component]
@@ -12,22 +12,22 @@ pub fn DocCard(
     children: Children,
 ) -> impl IntoView {
     view! {
-        <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm">
+        <div class="border-t border-white/10 pt-4 pb-6">
             {eyebrow
                 .map(|e| {
                     view! {
-                        <div class="mb-1 text-[11px] tracking-[0.16em] text-accent-300/80 uppercase">
+                        <div class="mb-2 font-mono text-[11px] tracking-[0.2em] text-accent-400/80 uppercase">
                             {e}
                         </div>
                     }
                 })}
-            <div class="mb-2 text-base font-semibold text-white">{title}</div>
-            <div class="text-sm leading-6 text-white/65">{children()}</div>
+            <div class="mb-2 text-base font-medium text-white">{title}</div>
+            <div class="text-sm leading-6 font-light text-white/65">{children()}</div>
         </div>
     }
 }
 
 #[component]
 pub fn Term(children: Children) -> impl IntoView {
-    view! { <strong class="text-white/85">{children()}</strong> }
+    view! { <strong class="font-medium text-white/85">{children()}</strong> }
 }

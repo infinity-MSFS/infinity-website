@@ -5,17 +5,27 @@ use infinity_ui::prelude::*;
 
 use super::blocks::block_list;
 use super::model::{OutlineChapter, OutlineSection};
-use super::shared::{FOCUS, PANEL, use_manual};
+use super::shared::{APPLIES, FOCUS, use_manual};
 use super::types::ManualChapter;
+use crate::components::{EYEBROW, HoverRule};
 
-const TITLE: &str =
-    "text-[1.875rem] font-semibold leading-[1.2] tracking-[-0.015em] text-white md:text-[2.25rem]";
-const LEDE: &str = "mt-4 max-w-3xl text-base leading-[1.75] text-white/[0.58]";
-const HEADER: &str = "p-7 md:p-9";
-const EYEBROW: &str = "mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs uppercase tracking-[0.16em] text-white/40";
-const GROUP_HEADING: &str = "mt-3 text-xs font-semibold uppercase tracking-[0.16em] text-white/40";
-const CARD_HOVER: &str =
-    "transition-colors duration-150 hover:border-accent-400/35 hover:bg-accent-400/[0.06]";
+const TITLE: &str = "text-4xl leading-[1.05] font-extralight tracking-tight text-white md:text-6xl";
+const LEDE: &str = "mt-8 max-w-2xl border-l border-accent-400/40 pl-5 text-base leading-relaxed font-light text-white/65";
+const META: &str = "mb-8 flex flex-wrap items-center gap-x-3 gap-y-2";
+/// Clickable hairline row: the parent of a `HoverRule`.
+const ROW: &str = "group relative border-t border-white/10 transition-colors hover:bg-white/[0.03]";
+
+/// Mono number and label with a hairline running to the edge, like the site's
+/// `SectionLabel` but for labels built at runtime.
+fn group_label(num: &'static str, label: String) -> impl IntoView {
+    view! {
+        <div class=cn!("mb-8 flex items-center gap-4", EYEBROW)>
+            <span class="text-accent-400/80">{num}</span>
+            <span>{label}</span>
+            <span class="h-px flex-1 bg-white/10"></span>
+        </div>
+    }
+}
 
 /// The manual's front page: every chapter, then the introduction.
 #[component]
@@ -26,77 +36,100 @@ pub fn MainPage(outline: Vec<OutlineChapter>, intro: Vec<Arc<OutlineSection>>) -
     let label = ctx.chapter_label;
 
     view! {
-        <header class=cn!(PANEL, HEADER)>
-            <div class=EYEBROW>
-                <Badge tone=Tone::Accent>"Manual"</Badge>
-                {manual.revision.map(|r| view! { <span>{r}</span> })}
-            </div>
+        <header class="max-w-4xl">
+            <p class=cn!(META, EYEBROW)>
+                <span class="text-accent-400/80">"Manual"</span>
+                {manual
+                    .revision
+                    .map(|r| {
+                        view! {
+                            <span class="text-white/25">"/"</span>
+                            <span>{r}</span>
+                        }
+                    })}
+            </p>
             <h1 class=TITLE>{manual.title}</h1>
             {manual.summary.map(|s| view! { <p class=LEDE>{s}</p> })}
             {aircraft
                 .filter(|_| manual.aircraft.len() > 1)
                 .map(|aircraft| {
                     view! {
-                        <p class="mt-5 text-[0.9375rem] leading-[1.6] text-white/[0.58]">
-                            "Showing the " <strong class="font-semibold text-white">{aircraft}</strong>
+                        <p class="mt-6 text-[0.9375rem] leading-[1.6] font-light text-white/55">
+                            "Showing the " <strong class="font-semibold text-accent-300">{aircraft}</strong>
                             ". Switch aircraft with the buttons at the top of the page."
                         </p>
                     }
                 })}
         </header>
 
-        <h2 class=GROUP_HEADING>{format!("{label}s")}</h2>
-        <ol class="grid list-none gap-4 sm:grid-cols-2 min-[1100px]:grid-cols-3">
-            {outline
-                .into_iter()
-                .map(|entry| {
-                    let chapter = entry.chapter;
-                    let badge = ctx.applies_to(chapter.applies_to);
-                    let count = entry.flat.len();
-                    let href = ctx.href(Some(chapter.slug), None);
-                    view! {
-                        <li class="flex">
-                            <a
-                                class=cn!(PANEL, CARD_HOVER, FOCUS, "flex flex-1 flex-col gap-2 px-6 py-[1.375rem]")
-                                href=href.clone()
-                                on:click=ctx.on_link(href)
-                            >
-                                <span class="flex flex-wrap items-center gap-2">
-                                    <span class="text-xs font-semibold uppercase tracking-[0.16em] text-accent-400/90">
-                                        {format!("{label} {}", entry.number)}
+        <section>
+            {group_label("01", format!("{label}s"))}
+            <ol class="list-none border-b border-white/10">
+                {outline
+                    .into_iter()
+                    .map(|entry| {
+                        let chapter = entry.chapter;
+                        let badge = ctx.applies_to(chapter.applies_to);
+                        let count = entry.flat.len();
+                        let href = ctx.href(Some(chapter.slug), None);
+                        view! {
+                            <li class=ROW>
+                                <HoverRule />
+                                <a
+                                    class=cn!(
+                                        FOCUS,
+                                        "grid gap-x-8 gap-y-2 py-6 md:grid-cols-[9rem_minmax(0,1fr)_auto] md:items-baseline md:px-2",
+                                    )
+                                    href=href.clone()
+                                    on:click=ctx.on_link(href)
+                                >
+                                    <span class="flex flex-col gap-1.5">
+                                        <span class="font-mono text-[11px] tracking-[0.25em] text-accent-400/80 uppercase">
+                                            {format!("{label} {}", entry.number)}
+                                        </span>
+                                        {badge.map(|b| view! { <span class=APPLIES>{b}</span> })}
                                     </span>
-                                    {badge.map(|b| view! { <Badge tone=Tone::Info size=Size::Sm>{b}</Badge> })}
-                                </span>
-                                <span class="text-xl font-semibold leading-[1.3] text-white">
-                                    {chapter.title}
-                                </span>
-                                {chapter
-                                    .summary
-                                    .map(|s| {
-                                        view! {
-                                            <span class="flex-1 text-sm leading-[1.6] text-white/[0.58]">
-                                                {s}
-                                            </span>
-                                        }
-                                    })}
-                                <span class="text-xs text-white/40">
-                                    {if count == 1 { "1 topic".to_string() } else { format!("{count} topics") }}
-                                </span>
-                            </a>
-                        </li>
-                    }
-                })
-                .collect_view()}
-        </ol>
+                                    <span class="flex min-w-0 flex-col gap-2">
+                                        <span class="text-xl leading-[1.3] font-light text-white md:text-2xl">
+                                            {chapter.title}
+                                        </span>
+                                        {chapter
+                                            .summary
+                                            .map(|s| {
+                                                view! {
+                                                    <span class="max-w-2xl text-sm leading-[1.6] font-light text-white/55">
+                                                        {s}
+                                                    </span>
+                                                }
+                                            })}
+                                    </span>
+                                    <span class="inline-flex items-center gap-3 font-mono text-[11px] text-white/40">
+                                        {if count == 1 { "1 topic".to_string() } else { format!("{count} topics") }}
+                                        <Icon
+                                            icon=icons::ARROW_RIGHT
+                                            class="h-4 w-4 text-white/60 transition-transform group-hover:translate-x-1 group-hover:text-accent-300"
+                                        />
+                                    </span>
+                                </a>
+                            </li>
+                        }
+                    })
+                    .collect_view()}
+            </ol>
+        </section>
 
         {(!intro.is_empty())
             .then(|| {
                 view! {
-                    <h2 class=GROUP_HEADING>"Introduction"</h2>
-                    {intro
-                        .into_iter()
-                        .map(|node| view! { <Section chapter_slug=None node=node heading_level=3 /> })
-                        .collect_view()}
+                    <section>
+                        {group_label("02", "Introduction".to_string())}
+                        <div class="flex flex-col gap-16">
+                            {intro
+                                .into_iter()
+                                .map(|node| view! { <Section chapter_slug=None node=node heading_level=3 /> })
+                                .collect_view()}
+                        </div>
+                    </section>
                 }
             })}
     }
@@ -123,37 +156,43 @@ pub fn ChapterPage(outline: Vec<OutlineChapter>, entry: OutlineChapter) -> impl 
         view! {
             <a
                 class=cn!(
-                    PANEL,
-                    CARD_HOVER,
+                    ROW,
                     FOCUS,
-                    "flex flex-col gap-1 px-5 py-4",
+                    "flex flex-col gap-2 px-2 py-6",
                     forward.then_some("items-end text-right sm:col-start-2"),
                 )
                 href=href.clone()
                 on:click=ctx.on_link(href)
             >
-                <span class="inline-flex items-center gap-1 text-xs uppercase tracking-[0.14em] text-white/40">
+                <HoverRule />
+                <span class=cn!("inline-flex items-center gap-2", EYEBROW)>
                     {if forward {
                         view! {
                             "Next"
-                            <Icon icon=icons::CHEVRON_RIGHT class="h-3.5 w-3.5" />
+                            <Icon
+                                icon=icons::ARROW_RIGHT
+                                class="h-3.5 w-3.5 transition-transform group-hover:translate-x-1"
+                            />
                         }
                             .into_any()
                     } else {
                         view! {
-                            <Icon icon=icons::CHEVRON_LEFT class="h-3.5 w-3.5" />
+                            <Icon
+                                icon=icons::ARROW_LEFT
+                                class="h-3.5 w-3.5 transition-transform group-hover:-translate-x-1"
+                            />
                             "Previous"
                         }
                             .into_any()
                     }}
                 </span>
-                <span class="text-base font-semibold text-white">{title}</span>
+                <span class="text-lg font-light text-white">{title}</span>
             </a>
         }
     };
     let pager = (prev.is_some() || next.is_some()).then(|| {
         view! {
-            <nav class="grid gap-4 sm:grid-cols-2" aria-label="Previous and next">
+            <nav class="grid sm:grid-cols-2 sm:gap-8" aria-label="Previous and next">
                 {prev.map(|p| pager_link(p, false))}
                 {next.map(|n| pager_link(n, true))}
             </nav>
@@ -161,18 +200,25 @@ pub fn ChapterPage(outline: Vec<OutlineChapter>, entry: OutlineChapter) -> impl 
     });
 
     view! {
-        <header class=cn!(PANEL, HEADER)>
-            <div class=EYEBROW>
-                <Badge tone=Tone::Accent>{format!("{label} {}", entry.number)}</Badge>
+        <header class="max-w-4xl">
+            <p class=cn!(META, EYEBROW)>
+                <span class="text-accent-400/80">{format!("{label} {}", entry.number)}</span>
+                <span class="text-white/25">"/"</span>
                 <a
-                    class=cn!("text-inherit hover:text-white", FOCUS)
+                    class=cn!("transition-colors hover:text-white", FOCUS)
                     href=home.clone()
                     on:click=ctx.on_link(home)
                 >
                     {ctx.manual.title}
                 </a>
-                {badge.map(|b| view! { <Badge tone=Tone::Info size=Size::Sm>{b}</Badge> })}
-            </div>
+                {badge
+                    .map(|b| {
+                        view! {
+                            <span class="text-white/25">"/"</span>
+                            <span class=APPLIES>{b}</span>
+                        }
+                    })}
+            </p>
             <h1 class=TITLE>{entry.chapter.title}</h1>
             {entry.chapter.summary.map(|s| view! { <p class=LEDE>{s}</p> })}
         </header>
@@ -182,7 +228,7 @@ pub fn ChapterPage(outline: Vec<OutlineChapter>, entry: OutlineChapter) -> impl 
             .is_empty()
             .then(|| {
                 view! {
-                    <p class=cn!(PANEL, "p-6 text-sm italic text-white/40")>
+                    <p class="border-t border-white/10 pt-6 font-mono text-[11px] text-white/35">
                         {format!("This {} hasn't been written yet.", label.to_lowercase())}
                     </p>
                 }
@@ -213,9 +259,9 @@ fn Section(
     let empty = node.blocks.is_empty() && node.children.is_empty();
 
     let heading_class = match depth {
-        0 => "text-[1.5rem] font-semibold leading-[1.3] tracking-[-0.01em] text-white",
-        1 => "text-[1.125rem] font-semibold leading-[1.45] text-white",
-        _ => "text-base font-semibold leading-normal text-white",
+        0 => "text-2xl leading-[1.25] font-light tracking-tight text-white md:text-3xl",
+        1 => "text-lg leading-[1.45] font-normal text-white",
+        _ => "text-base leading-normal font-medium text-white/90",
     };
     let title = section.title;
     let heading = match (depth + heading_level).min(6) {
@@ -225,15 +271,44 @@ fn Section(
         5 => view! { <h5 class=heading_class>{title}</h5> }.into_any(),
         _ => view! { <h6 class=heading_class>{title}</h6> }.into_any(),
     };
+    let number = node.number.clone();
+    let copy = view! {
+        <CopyLink chapter_slug=chapter_slug slug=node.slug.clone() title=title compact={depth > 0} />
+    };
 
-    let number = (!node.number.is_empty()).then(|| {
-        let class = if depth == 0 {
-            "mt-0.5 min-w-10 shrink-0 rounded-xl border border-accent-400/[0.22] bg-accent-400/10 px-2 py-[0.3125rem] text-center text-xs font-bold leading-[1.4] tabular-nums text-accent-200"
-        } else {
-            "min-w-10 shrink-0 pt-0.5 text-center text-[0.8125rem] font-semibold tabular-nums text-accent-400/85"
-        };
-        view! { <span class=class>{node.number.clone()}</span> }
-    });
+    // A top-level section opens with a numbered hairline label carrying the
+    // copy-link button; nested ones put the number beside the heading.
+    let head = if depth == 0 {
+        view! {
+            <div class=cn!("mb-5 flex items-center gap-4", EYEBROW)>
+                {(!number.is_empty()).then(|| view! { <span class="text-accent-400/80">{number}</span> })}
+                {badge.map(|b| view! { <span class=APPLIES>{b}</span> })}
+                <span class="h-px flex-1 bg-white/10"></span>
+                {copy}
+            </div>
+            {heading}
+        }
+            .into_any()
+    } else {
+        view! {
+            <div class="flex items-baseline gap-3">
+                {(!number.is_empty())
+                    .then(|| {
+                        view! {
+                            <span class="min-w-10 shrink-0 font-mono text-[11px] tabular-nums text-accent-400/70">
+                                {number}
+                            </span>
+                        }
+                    })}
+                <div class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1.5">
+                    {heading}
+                    {badge.map(|b| view! { <span class=APPLIES>{b}</span> })}
+                </div>
+                {copy}
+            </div>
+        }
+            .into_any()
+    };
 
     view! {
         <section
@@ -242,37 +317,25 @@ fn Section(
             class=cn!(
                 "scroll-mt-[var(--manual-landing)]",
                 match depth {
-                    0 => cn!(PANEL, "p-6 md:px-8 md:py-7"),
-                    1 => "mt-7 border-t border-white/[0.07] pt-6".to_string(),
-                    _ => "mt-6".to_string(),
+                    0 => "",
+                    1 => "mt-10 border-t border-white/[0.07] pt-6",
+                    _ => "mt-6",
                 },
             )
         >
-            <div class="flex items-start gap-3">
-                {number}
-                <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
-                    {heading}
-                    {badge.map(|b| view! { <Badge tone=Tone::Info size=Size::Sm>{b}</Badge> })}
-                </div>
-                <CopyLink
-                    chapter_slug=chapter_slug
-                    slug=node.slug.clone()
-                    title=title
-                    compact={depth > 0}
-                />
-            </div>
+            {head}
             {section
                 .summary
                 .map(|s| {
                     view! {
-                        <p class="mt-3 text-[0.9375rem] leading-[1.65] text-white/[0.58]">{s}</p>
+                        <p class="mt-3 max-w-3xl text-sm leading-relaxed font-light text-white/55">{s}</p>
                     }
                 })}
             {block_list(&node.blocks)}
             {empty
                 .then(|| {
                     view! {
-                        <p class="mt-4 text-sm italic text-white/40">
+                        <p class="mt-4 font-mono text-[11px] text-white/35">
                             "This topic hasn't been written yet."
                         </p>
                     }
@@ -324,21 +387,20 @@ fn CopyLink(
         <button
             type="button"
             class=cn!(
-                "inline-flex shrink-0 items-center gap-1.5 rounded-[0.875rem] border text-[0.8125rem] leading-[1.4] text-white/[0.58] transition-colors duration-150 hover:border-accent-400/30 hover:bg-accent-400/10 hover:text-white",
+                "inline-flex shrink-0 items-center gap-1.5 transition-colors duration-150 hover:text-accent-300",
                 FOCUS,
-                if compact {
-                    "border-transparent bg-transparent p-1.5"
-                } else {
-                    "border-white/10 bg-black/20 px-2.5 py-1.5"
-                },
+                if compact { "p-1 text-white/35" } else { "uppercase" },
             )
             on:click=on_click
             aria-label=format!("Copy link to {title}")
             title="Copy link"
         >
             {move || {
-                let icon = if copied.get() { icons::CHECK } else { icons::LINK_2 };
-                view! { <Icon icon=icon class="h-3.5 w-3.5 text-accent-400" /> }
+                if copied.get() {
+                    view! { <Icon icon=icons::CHECK class="h-3 w-3 text-accent-400" /> }
+                } else {
+                    view! { <Icon icon=icons::LINK_2 class="h-3 w-3" /> }
+                }
             }}
             {(!compact)
                 .then(|| {
@@ -383,17 +445,22 @@ fn NotFoundPanel(title: String, lede: String) -> impl IntoView {
     let ctx = use_manual();
     let home = ctx.href(None, None);
     view! {
-        <div class=cn!(PANEL, "px-7 py-10 text-center")>
+        <div class="max-w-4xl py-12 md:py-20">
+            <p class=cn!(META, EYEBROW)>{ctx.manual.title}</p>
             <h1 class=TITLE>{title}</h1>
-            <p class=cn!(LEDE, "mx-auto")>{lede}</p>
+            <p class=LEDE>{lede}</p>
             <a
                 class=cn!(
-                    "mt-6 inline-flex rounded-lg bg-accent-600 px-6 py-2 font-medium text-white transition-colors hover:bg-accent-700",
+                    "group mt-10 inline-flex items-center gap-2 text-lg font-medium text-white transition-colors hover:text-accent-300",
                     FOCUS,
                 )
                 href=home.clone()
                 on:click=ctx.on_link(home)
             >
+                <Icon
+                    icon=icons::ARROW_LEFT
+                    class="h-4 w-4 transition-transform group-hover:-translate-x-1"
+                />
                 "Back to the overview"
             </a>
         </div>

@@ -25,6 +25,7 @@ use crate::api::{
     SignerIdentity,
 };
 use crate::auth::use_auth;
+use crate::components::{EYEBROW, SectionLabel};
 use crate::nav;
 
 /// How close to the bottom counts as "read it". A few pixels of slack keeps
@@ -276,26 +277,34 @@ pub fn BetaSignDocument() -> impl IntoView {
     };
 
     view! {
-        <AnimatedPage class="relative z-10 min-h-screen px-4 py-10 text-white md:px-8">
-            <div class="mx-auto max-w-3xl">
-                <button
-                    type="button"
-                    class="mb-6 inline-flex items-center gap-2 text-sm text-white/50 transition-colors hover:text-white"
-                    on:click=move |_| go.run(nav::BETA.to_string())
-                >
-                    <Icon icon=icons::ARROW_LEFT class="h-4 w-4" />
-                    "Back to the beta page"
-                </button>
+        <AnimatedPage class="min-h-screen text-white">
+            <div class="mx-auto max-w-6xl px-6 py-10 md:px-10 md:py-14">
+                <div class="mb-10 flex flex-wrap items-center justify-between gap-4">
+                    <p class=EYEBROW>"Infinity / Beta / Paperwork"</p>
+                    <button
+                        type="button"
+                        class="group inline-flex items-center gap-2 text-sm text-white/55 transition-colors hover:text-white"
+                        on:click=move |_| go.run(nav::BETA.to_string())
+                    >
+                        <Icon
+                            icon=icons::ARROW_LEFT
+                            class="h-4 w-4 transition-transform group-hover:-translate-x-1"
+                        />
+                        "Back to the beta page"
+                    </button>
+                </div>
 
                 <Show
                     when=move || auth.is_authenticated.get()
                     fallback=|| {
                         view! {
-                            <Alert
-                                tone=Tone::Info
-                                title="Sign in required"
-                                description="These documents are only available to accepted testers."
-                            />
+                            <h1 class="mb-4 text-4xl font-extralight tracking-tight md:text-5xl">
+                                "Sign in "
+                                <span class="font-semibold text-accent-300">"required."</span>
+                            </h1>
+                            <p class="max-w-md border-l border-accent-400/40 pl-5 font-light text-white/60">
+                                "These documents are only available to accepted testers."
+                            </p>
                         }
                     }
                 >
@@ -304,11 +313,10 @@ pub fn BetaSignDocument() -> impl IntoView {
                             .get()
                             .map(|message| {
                                 view! {
-                                    <Alert
-                                        tone=Tone::Danger
-                                        title="Couldn't load the document"
-                                        description=message
-                                    />
+                                    <p class="border-l border-red-400/60 pl-4 text-sm text-red-200">
+                                        "Couldn't load the document. "
+                                        <span class="text-red-200/70">{message}</span>
+                                    </p>
                                 }
                             })
                     }}
@@ -320,14 +328,7 @@ pub fn BetaSignDocument() -> impl IntoView {
                                     if e.is_some() {
                                         ().into_any()
                                     } else {
-                                        view! {
-                                            <Panel class="space-y-3 p-6">
-                                                <Skeleton class="h-6 w-64" />
-                                                <Skeleton class="h-4 w-full" />
-                                                <Skeleton class="h-4 w-5/6" />
-                                                <Skeleton class="h-4 w-4/6" />
-                                            </Panel>
-                                        }
+                                        view! { <p class=cn!("py-8", EYEBROW)>"Loading…"</p> }
                                             .into_any()
                                     }
                                 });
@@ -339,21 +340,23 @@ pub fn BetaSignDocument() -> impl IntoView {
                         view! {
                             <DocumentHeader doc=doc.clone() />
 
-                            <Panel class="mb-6 overflow-hidden p-0">
-                                <div
-                                    node_ref=scroller
-                                    on:scroll=on_scroll
-                                    class="max-h-[60vh] overflow-y-auto px-6 py-6"
-                                >
-                                    <DocumentBody doc=doc.clone() />
+                            <section class="mb-20">
+                                <div class="border-y border-white/10">
+                                    <div
+                                        node_ref=scroller
+                                        on:scroll=on_scroll
+                                        class="max-h-[60vh] overflow-y-auto py-8 pr-4"
+                                    >
+                                        <DocumentBody doc=doc.clone() />
+                                    </div>
                                 </div>
                                 <div class=move || {
                                     cn!(
-                                        "flex items-center gap-2 border-t px-6 py-3 text-xs transition-colors",
+                                        "flex items-center gap-2 py-3 font-mono text-[11px] tracking-[0.2em] uppercase transition-colors",
                                         if read_to_end.get() {
-                                            "border-emerald-400/20 bg-emerald-500/[0.06] text-emerald-300"
+                                            "text-accent-300"
                                         } else {
-                                            "border-white/[0.06] bg-white/[0.02] text-white/45"
+                                            "text-white/45"
                                         },
                                     )
                                 }>
@@ -363,7 +366,7 @@ pub fn BetaSignDocument() -> impl IntoView {
                                         } else {
                                             icons::CHEVRON_DOWN
                                         };
-                                        view! { <Icon icon=icon class="h-4 w-4" /> }
+                                        view! { <Icon icon=icon class="h-3.5 w-3.5" /> }
                                     }}
                                     {move || {
                                         if read_to_end.get() {
@@ -373,7 +376,7 @@ pub fn BetaSignDocument() -> impl IntoView {
                                         }
                                     }}
                                 </div>
-                            </Panel>
+                            </section>
 
                             {move || match status.get() {
                                 Status::Signed { receipt, at, complete } => {
@@ -425,36 +428,40 @@ pub fn BetaSignDocument() -> impl IntoView {
 #[component]
 fn DocumentHeader(doc: BetaDocument) -> impl IntoView {
     view! {
-        <div class="mb-6">
-            <div class="mb-3 flex flex-wrap items-center gap-2">
-                <Badge tone=Tone::Info icon=icons::FILE_TEXT>"Beta paperwork"</Badge>
-                <Badge tone=Tone::Neutral size=Size::Xs>{format!("v{}", doc.version)}</Badge>
+        <header class="mb-12">
+            <div class="mb-5 flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-[11px]">
+                <span class="tracking-[0.2em] text-accent-400/80 uppercase">"Beta paperwork"</span>
+                <span class="text-white/50">{format!("v{}", doc.version)}</span>
                 {(!doc.effective_date.is_empty())
                     .then(|| {
                         view! {
-                            <span class="text-xs text-white/40">
+                            <span class="text-white/40">
                                 {format!("Effective {}", doc.effective_date)}
                             </span>
                         }
                     })}
             </div>
-            <h1 class="mb-2 text-3xl font-bold">{doc.title.clone()}</h1>
-            <p class="max-w-2xl text-sm leading-relaxed text-white/60">{doc.summary.clone()}</p>
-        </div>
+            <h1 class="text-4xl leading-[1.05] font-extralight tracking-tight md:text-6xl">
+                {doc.title.clone()}
+            </h1>
+            <p class="mt-8 max-w-xl border-l border-accent-400/40 pl-5 font-light text-white/65">
+                {doc.summary.clone()}
+            </p>
+        </header>
     }
 }
 
 #[component]
 fn DocumentBody(doc: BetaDocument) -> impl IntoView {
     view! {
-        <div class="space-y-6">
+        <div class="max-w-3xl space-y-8">
             {doc
                 .sections
                 .into_iter()
                 .map(|section| {
                     view! {
                         <section>
-                            <h2 class="mb-2 text-sm font-semibold tracking-[0.04em] text-white">
+                            <h2 class="mb-3 text-base font-medium tracking-tight text-white">
                                 {section.heading}
                             </h2>
                             <div class="space-y-3">
@@ -463,7 +470,7 @@ fn DocumentBody(doc: BetaDocument) -> impl IntoView {
                                     .into_iter()
                                     .map(|paragraph| {
                                         view! {
-                                            <p class="text-sm leading-7 text-white/65">
+                                            <p class="text-sm leading-relaxed font-light text-white/75">
                                                 {paragraph}
                                             </p>
                                         }
@@ -508,13 +515,10 @@ fn SignatureBlock(
     });
 
     view! {
-        <Panel class="p-6">
-            <div class="mb-5 flex items-center gap-3">
-                <Icon icon=icons::PENCIL class="h-5 w-5 text-accent-400" />
-                <h2 class="text-xl font-bold">"Sign this agreement"</h2>
-            </div>
+        <section>
+            <SectionLabel num="01" label="Sign this agreement" />
 
-            <p class="mb-5 text-sm leading-relaxed text-white/55">
+            <p class="mb-8 max-w-2xl text-sm leading-relaxed font-light text-white/60">
                 "This is a binding agreement, so we need to know who is bound by it. Give the details of the person signing — not a nickname, and not a company unless you are signing on its behalf."
             </p>
 
@@ -547,10 +551,7 @@ fn SignatureBlock(
                 />
             </Field>
 
-            <div class="mt-6 mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-white/45">
-                <Icon icon=icons::MAP class="h-4 w-4 text-accent-400" />
-                "Address"
-            </div>
+            <p class=cn!("mt-10 mb-4", EYEBROW)>"Address"</p>
             <div class="grid gap-4">
                 <Field label="Street address" required=true>
                     <TextInput
@@ -604,11 +605,8 @@ fn SignatureBlock(
                 />
             </Field>
 
-            <Divider class="my-6" />
-
-            <div class="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-white/45">
-                <Icon icon=icons::PENCIL class="h-4 w-4 text-accent-400" />
-                "Your signature"
+            <div class="mt-16">
+                <SectionLabel num="02" label="Your signature" />
             </div>
             <Field label="Sign your name" required=true hint="Draw it, or type it — both count.">
                 <TextInput
@@ -634,31 +632,29 @@ fn SignatureBlock(
                 <SignaturePad canvas_ref=canvas_ref has_ink=has_ink />
             </Show>
 
-            <Well class="mt-5 p-4">
+            <div class="mt-8 border-l border-accent-400/40 pl-5">
                 <Checkbox
                     checked=agreed
                     on_change=Callback::new(move |v| agreed.set(v))
                     label="I have read this document in full and intend to sign it electronically. My electronic signature is the legal equivalent of my handwritten one."
                 />
-            </Well>
+            </div>
 
             {move || {
                 failure
                     .get()
                     .map(|message| {
                         view! {
-                            <Alert
-                                tone=Tone::Danger
-                                title="Not signed"
-                                description=message
-                                class="mt-5"
-                            />
+                            <p class="mt-6 border-l border-red-400/60 pl-4 text-sm text-red-200">
+                                "Not signed. "
+                                <span class="text-red-200/70">{message}</span>
+                            </p>
                         }
                     })
             }}
 
-            <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div class="text-xs leading-5 text-white/40">
+            <div class="mt-8 flex flex-col gap-4 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
+                <div class="font-mono text-[11px] leading-5 text-white/45">
                     {move || {
                         blocker
                             .get()
@@ -679,7 +675,7 @@ fn SignatureBlock(
                     "Sign document"
                 </Button>
             </div>
-        </Panel>
+        </section>
     }
 }
 
@@ -689,7 +685,7 @@ fn SignatureBlock(
 #[component]
 fn TypedSignature(typed_name: RwSignal<String>) -> impl IntoView {
     view! {
-        <div class="flex h-[180px] items-center justify-center rounded-2xl border border-white/10 bg-white px-6">
+        <div class="flex h-[180px] items-center justify-center rounded-sm border border-white/10 bg-white px-6">
             <span
                 class="truncate text-4xl text-slate-900"
                 style="font-family: 'Segoe Script', 'Brush Script MT', 'Snell Roundhand', cursive;"
@@ -768,7 +764,7 @@ fn SignaturePad(
         <div class="relative">
             <canvas
                 node_ref=canvas_ref
-                class="h-[180px] w-full cursor-crosshair rounded-2xl border border-white/10 bg-white"
+                class="h-[180px] w-full cursor-crosshair rounded-sm border border-white/10 bg-white"
                 style="touch-action: none;"
                 on:pointerdown=move |ev: web_sys::PointerEvent| {
                     ev.prevent_default();
@@ -806,7 +802,7 @@ fn SignaturePad(
 
             <button
                 type="button"
-                class="absolute top-3 right-3 rounded-lg border border-slate-300 bg-white/90 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-white hover:text-slate-900"
+                class="absolute top-3 right-3 rounded-sm border border-slate-300 bg-white/90 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-white hover:text-slate-900"
                 on:click=move |_| clear(())
             >
                 "Clear"
@@ -837,19 +833,18 @@ fn SignedReceipt(
     go: Callback<String>,
 ) -> impl IntoView {
     view! {
-        <Panel class="p-8 text-center">
-            <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-400/30 bg-emerald-500/10">
-                <Icon icon=icons::CIRCLE_CHECK class="h-6 w-6 text-emerald-300" />
-            </div>
-            <h2 class="mb-2 text-xl font-bold">"Signed"</h2>
-            <p class="mx-auto mb-1 max-w-md text-sm leading-relaxed text-white/60">
+        <section class="border-t border-white/10 pt-8">
+            <h2 class="mb-4 text-3xl font-extralight tracking-tight text-accent-300 md:text-4xl">
+                "Signed"
+            </h2>
+            <p class="mb-3 max-w-md border-l border-accent-400/60 pl-4 text-sm leading-relaxed font-light text-white/65">
                 {if complete {
                     "That's both documents done. Watch Discord — your build follows."
                 } else {
                     "One down. Head back and sign the other one."
                 }}
             </p>
-            <p class="mb-6 font-mono text-xs text-white/35">
+            <p class="mb-8 font-mono text-[11px] break-all text-white/40">
                 {format!("Receipt {receipt} · {at}")}
             </p>
             <Button
@@ -859,39 +854,35 @@ fn SignedReceipt(
             >
                 "Back to the beta page"
             </Button>
-        </Panel>
+        </section>
     }
 }
 
 #[component]
 fn AlreadySigned(doc: BetaDocument, go: Callback<String>) -> impl IntoView {
     view! {
-        <Panel class="p-6">
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
-                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-400/30 bg-emerald-500/10">
-                    <Icon icon=icons::CIRCLE_CHECK class="h-5 w-5 text-emerald-300" />
+        <section class="flex flex-col gap-4 border-y border-white/10 py-6 sm:flex-row sm:items-center">
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 text-base font-medium text-white">
+                    <Icon icon=icons::CIRCLE_CHECK class="h-4 w-4 shrink-0 text-accent-300" />
+                    {format!("You signed this (v{})", doc.version)}
                 </div>
-                <div class="min-w-0 flex-1">
-                    <div class="font-semibold text-white">
-                        {format!("You signed this (v{})", doc.version)}
-                    </div>
-                    <div class="text-sm text-white/55">
-                        {doc
-                            .signed_at
-                            .clone()
-                            .map(|at| format!("Signed {at}"))
-                            .unwrap_or_else(|| "On file with us.".to_string())}
-                    </div>
+                <div class="mt-1 font-mono text-[11px] text-white/45">
+                    {doc
+                        .signed_at
+                        .clone()
+                        .map(|at| format!("Signed {at}"))
+                        .unwrap_or_else(|| "On file with us.".to_string())}
                 </div>
-                <Button
-                    variant=Variant::Glass
-                    icon=icons::ARROW_LEFT
-                    on_click=nav::go_to(go, nav::BETA)
-                    class="shrink-0"
-                >
-                    "Back"
-                </Button>
             </div>
-        </Panel>
+            <Button
+                variant=Variant::Ghost
+                icon=icons::ARROW_LEFT
+                on_click=nav::go_to(go, nav::BETA)
+                class="shrink-0 self-start sm:self-auto"
+            >
+                "Back"
+            </Button>
+        </section>
     }
 }

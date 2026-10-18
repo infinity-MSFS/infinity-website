@@ -1,8 +1,9 @@
 use infinity_ui::prelude::*;
 
 use super::model::{Inline, parse_inline};
-use super::shared::{FOCUS, OCTAGON_ALERT, use_manual};
+use super::shared::{APPLIES, FOCUS, OCTAGON_ALERT, use_manual};
 use super::types::{BlockBody, CalloutTone, ManualBlock};
+use crate::components::EYEBROW;
 
 /// Renders inline markup: **bold**, *italic*, `code` and [label](target).
 pub fn inline(text: &str) -> AnyView {
@@ -16,7 +17,7 @@ pub fn inline(text: &str) -> AnyView {
             }
             Inline::Code(text) => {
                 view! {
-                    <code class="rounded-md border border-white/10 bg-black/30 px-[0.4em] py-[0.1em] font-mono text-[0.88em] text-accent-200">
+                    <code class="rounded-sm bg-white/[0.06] px-[0.35em] py-[0.1em] font-mono text-[0.88em] text-accent-200">
                         {text.to_string()}
                     </code>
                 }
@@ -104,26 +105,60 @@ fn paragraphs(text: &str, class: &'static str) -> impl IntoView + use<> {
         .collect_view()
 }
 
-const BLOCK_TITLE: &str = "text-xs font-semibold uppercase tracking-[0.16em] text-white/40";
+const BLOCK_TITLE: &str = EYEBROW;
 
 fn block_view(block: &'static ManualBlock) -> AnyView {
     match block.body {
-        BlockBody::Text(content) => paragraphs(content, "").into_any(),
+        BlockBody::Text(content) => paragraphs(content, "font-light text-white/70").into_any(),
 
         BlockBody::Callout {
             tone,
             title,
             content,
         } => {
-            let (label, tone, icon) = match tone {
-                CalloutTone::Note => ("Note", Tone::Accent, icons::INFO),
-                CalloutTone::Caution => ("Caution", Tone::Warning, icons::TRIANGLE_ALERT),
-                CalloutTone::Warning => ("Warning", Tone::Danger, OCTAGON_ALERT),
+            // A hairline in the tone's colour with a mono label. Warnings get
+            // a heavier rule so they read first.
+            let (label, icon, rule, head, body) = match tone {
+                CalloutTone::Note => (
+                    "Note",
+                    icons::INFO,
+                    "border-l border-accent-400/50",
+                    "text-accent-300/90",
+                    "leading-[1.7] font-light text-white/70",
+                ),
+                CalloutTone::Caution => (
+                    "Caution",
+                    icons::TRIANGLE_ALERT,
+                    "border-l border-amber-400/60",
+                    "text-amber-300",
+                    "leading-[1.7] font-light text-amber-100/85",
+                ),
+                CalloutTone::Warning => (
+                    "Warning",
+                    OCTAGON_ALERT,
+                    "border-l-2 border-red-400/70",
+                    "text-red-300",
+                    "leading-[1.7] font-light text-red-100/90",
+                ),
             };
             view! {
-                <Callout tone=tone icon=icon title=title.unwrap_or(label).to_string()>
-                    {paragraphs(content, "text-[0.9rem] leading-[1.7] text-white/[0.86]")}
-                </Callout>
+                <div role="note" class=cn!("py-1 pl-5", rule)>
+                    <p class=cn!(
+                        "mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] tracking-[0.25em] uppercase",
+                        head,
+                    )>
+                        <Icon icon=icon class="h-3.5 w-3.5 shrink-0" />
+                        <span>{label}</span>
+                        {title
+                            .map(|t| {
+                                view! {
+                                    <span class="text-white/25">"/"</span>
+                                    <span>{t}</span>
+                                }
+                            })}
+                    </p>
+                    {paragraphs(content, body)}
+                </div>
             }
                 .into_any()
         }
@@ -133,10 +168,10 @@ fn block_view(block: &'static ManualBlock) -> AnyView {
                 .iter()
                 .map(|item| view! { <li class="pl-1">{inline(item)}</li> })
                 .collect_view();
-            let class = "space-y-1.5 pl-[1.375rem] text-[0.9375rem] leading-[1.75] marker:text-accent-400/85";
+            let class = "space-y-1.5 pl-[1.375rem] text-[0.9375rem] leading-[1.75] font-light text-white/70 marker:text-accent-400/80";
             if ordered {
                 view! {
-                    <ol class=cn!(class, "list-decimal marker:font-semibold marker:tabular-nums")>
+                    <ol class=cn!(class, "list-decimal marker:font-mono marker:text-[0.8em] marker:tabular-nums")>
                         {rows}
                     </ol>
                 }
@@ -147,7 +182,7 @@ fn block_view(block: &'static ManualBlock) -> AnyView {
         }
 
         BlockBody::Checklist { title, items } => view! {
-            <div class="rounded-[1.25rem] border border-white/10 bg-black/20 px-5 py-4">
+            <div class="border-y border-white/10 py-4">
                 {title.map(|t| view! { <div class=cn!("mb-3", BLOCK_TITLE)>{t}</div> })}
                 <ol class="list-none">
                     {items
@@ -155,12 +190,12 @@ fn block_view(block: &'static ManualBlock) -> AnyView {
                         .map(|entry| {
                             view! {
                                 <li class="flex items-baseline gap-2 py-[0.3125rem] text-[0.9375rem] leading-normal">
-                                    <span class="text-white/[0.76]">{inline(entry.item)}</span>
+                                    <span class="font-light text-white/70">{inline(entry.item)}</span>
                                     <span
-                                        class="min-w-6 flex-1 border-b-2 border-dotted border-white/20"
+                                        class="min-w-6 flex-1 border-b border-dotted border-white/25"
                                         aria-hidden="true"
                                     ></span>
-                                    <span class="text-right font-semibold tracking-[0.04em] text-accent-200">
+                                    <span class="text-right font-mono text-[0.8125rem] tracking-[0.08em] text-accent-200">
                                         {inline(entry.action)}
                                     </span>
                                 </li>
@@ -178,16 +213,16 @@ fn block_view(block: &'static ManualBlock) -> AnyView {
             rows,
             dense,
         } => {
-            let pad = if dense { "px-3 py-2" } else { "px-4 py-3" };
+            let pad = if dense { "py-2 pr-4" } else { "py-3 pr-6" };
             let last = rows.len().saturating_sub(1);
             view! {
-                <div class="overflow-hidden rounded-[1.25rem] border border-white/10 bg-black/15">
+                <div class="border-y border-white/10">
                     {title
                         .map(|t| {
                             view! {
                                 <div class=cn!(
                                     BLOCK_TITLE,
-                                    "border-b border-white/10 bg-white/[0.03] px-4 py-3",
+                                    "border-b border-white/10 py-3",
                                 )>{t}</div>
                             }
                         })}
@@ -208,7 +243,7 @@ fn block_view(block: &'static ManualBlock) -> AnyView {
                                                 <th
                                                     scope="col"
                                                     class=cn!(
-                                                        "sticky top-0 z-[1] whitespace-nowrap border-b border-white/10 bg-[rgb(11,17,19)] text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-white/40",
+                                                        "sticky top-0 z-[1] whitespace-nowrap border-b border-white/10 bg-[rgb(5,9,11)] font-mono text-[10px] font-normal tracking-[0.2em] text-white/45 uppercase",
                                                         pad,
                                                     )
                                                 >
@@ -225,13 +260,12 @@ fn block_view(block: &'static ManualBlock) -> AnyView {
                                     .enumerate()
                                     .map(|(r, row)| {
                                         let cell = cn!(
-                                            "align-top text-white/[0.76]",
+                                            "align-top font-light text-white/70",
                                             pad,
                                             (r < last).then_some("border-b border-white/[0.06]"),
-                                            (r % 2 == 0).then_some("bg-white/[0.02]"),
                                         );
                                         view! {
-                                            <tr>
+                                            <tr class="transition-colors hover:bg-white/[0.02]">
                                                 {row
                                                     .iter()
                                                     .map(|value| {
@@ -260,10 +294,10 @@ fn block_view(block: &'static ManualBlock) -> AnyView {
         } => {
             let src = use_manual().resolve_asset(src);
             view! {
-                <figure class="rounded-[1.25rem] border border-white/10 bg-black/15 p-3.5">
+                <figure>
                     {title.map(|t| view! { <div class=cn!("mb-3", BLOCK_TITLE)>{t}</div> })}
                     <img
-                        class="block h-auto w-full rounded-[0.875rem] bg-black/30"
+                        class="block h-auto w-full rounded-sm border border-white/10 bg-black/30"
                         src=src
                         alt=alt
                         width=width
@@ -274,7 +308,7 @@ fn block_view(block: &'static ManualBlock) -> AnyView {
                     {caption
                         .map(|c| {
                             view! {
-                                <figcaption class="mt-3 text-sm leading-[1.6] text-white/[0.58]">
+                                <figcaption class="mt-3 border-l border-white/15 pl-4 text-sm leading-[1.6] font-light text-white/55">
                                     {inline(c)}
                                 </figcaption>
                             }
@@ -297,17 +331,13 @@ pub fn block_list(blocks: &[&'static ManualBlock]) -> impl IntoView + use<> {
                     <div>
                         {label
                             .map(|l| {
-                                view! {
-                                    <Badge tone=Tone::Info size=Size::Sm class="mb-2">
-                                        {l}
-                                    </Badge>
-                                }
+                                view! { <p class=cn!("mb-2", APPLIES)>{l}</p> }
                             })}
                         {block_view(block)}
                     </div>
                 }
             })
             .collect_view();
-        view! { <div class="mt-5 flex flex-col gap-[1.125rem]">{views}</div> }
+        view! { <div class="mt-6 flex flex-col gap-6">{views}</div> }
     })
 }

@@ -16,6 +16,7 @@ use crate::api::{
     self, AdminApplication, AdminApplicationDetail, AdminSignature, BetaDecision, BetaStatus,
 };
 use crate::auth::use_auth;
+use crate::components::{EYEBROW, HoverRule, SectionLabel};
 use wasm_bindgen::JsCast;
 
 /// Render an ISO timestamp as something readable. The worker stores UTC, so
@@ -75,14 +76,17 @@ fn status_label(status: BetaStatus) -> &'static str {
     }
 }
 
-fn status_tone(status: BetaStatus) -> Tone {
+fn status_color(status: BetaStatus) -> &'static str {
     match status {
-        BetaStatus::Approved => Tone::Accent,
-        BetaStatus::Accepted | BetaStatus::Requested => Tone::Info,
-        BetaStatus::Rejected => Tone::Danger,
-        BetaStatus::None | BetaStatus::Withdrawn => Tone::Neutral,
+        BetaStatus::Approved => "text-accent-300",
+        BetaStatus::Accepted | BetaStatus::Requested => "text-amber-300",
+        BetaStatus::Rejected => "text-red-300",
+        BetaStatus::None | BetaStatus::Withdrawn => "text-white/40",
     }
 }
+
+/// Mono status tag used in place of a badge.
+const TAG: &str = "font-mono text-[11px] tracking-[0.2em] uppercase";
 
 /// Accepted, everything signed, waiting on a human to look at the paperwork.
 fn ready_to_approve(application: &AdminApplication) -> bool {
@@ -98,7 +102,7 @@ pub fn BetaAdmin() -> impl IntoView {
             when=move || !auth.loading.get()
             fallback=|| {
                 view! {
-                    <div class="flex min-h-screen items-center justify-center text-white/60">
+                    <div class=cn!("flex min-h-screen items-center justify-center", EYEBROW)>
                         "Loading…"
                     </div>
                 }
@@ -176,139 +180,143 @@ fn Queue() -> impl IntoView {
     let tabs = Signal::derive(move || {
         vec![
             TabItem::new("requested", "Awaiting review")
-                .with_icon(icons::CLOCK)
                 .with_badge(count(BetaStatus::Requested).to_string()),
             TabItem::new("paperwork", "In paperwork")
-                .with_icon(icons::FILE_TEXT)
                 .with_badge(count(BetaStatus::Accepted).to_string()),
             TabItem::new("approved", "Approved")
-                .with_icon(icons::CIRCLE_CHECK)
                 .with_badge(count(BetaStatus::Approved).to_string()),
             TabItem::new("rejected", "Rejected")
-                .with_icon(icons::CIRCLE_X)
                 .with_badge(count(BetaStatus::Rejected).to_string()),
             TabItem::new("all", "All").with_badge(all.get().len().to_string()),
         ]
     });
 
     view! {
-        <AnimatedPage class="relative z-10 min-h-screen px-4 py-12 text-white md:px-8">
-            <div class="mx-auto max-w-5xl">
-                <div class="mb-8 flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                        <Badge tone=Tone::Dev icon=icons::SHIELD>"Staff"</Badge>
-                        <h1 class="mt-3 mb-1 text-3xl font-bold">"Beta applications"</h1>
-                        <p class="text-sm text-white/55">
-                            {format!("Aerodynamics DC-10 · programme \"{}\"", api::BETA_PROGRAM)}
-                        </p>
+        <AnimatedPage class="min-h-screen text-white">
+            <div class="mx-auto max-w-6xl px-6 py-10 md:px-10 md:py-14">
+                <header class="mb-16">
+                    <p class=cn!("mb-10", EYEBROW)>"Infinity / Beta / Admin"</p>
+                    <div class="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+                        <div>
+                            <h1 class="text-4xl leading-[1.05] font-extralight tracking-tight md:text-6xl">
+                                "Beta "
+                                <span class="font-semibold text-accent-300">"applications"</span>
+                            </h1>
+                            <p class="mt-8 max-w-xl border-l border-accent-400/40 pl-5 font-light text-white/65">
+                                {format!("Aerodynamics DC-10 · programme \"{}\"", api::BETA_PROGRAM)}
+                            </p>
+                            <p class="mt-4 font-mono text-[11px] tracking-[0.2em] text-amber-300 uppercase">
+                                "Staff"
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            disabled=move || loading.get()
+                            on:click=move |_| refresh()
+                            class="inline-flex items-center gap-2 self-start text-sm text-white/55 transition-colors hover:text-white disabled:opacity-40 md:self-end"
+                        >
+                            <Icon icon=icons::REFRESH_CW class="h-4 w-4" />
+                            "Refresh"
+                        </button>
                     </div>
-                    <IconButton
-                        icon=icons::REFRESH_CW
-                        label="Refresh"
-                        variant=Variant::Glass
-                        disabled=loading
-                        on_click=Callback::new(move |()| refresh())
-                    />
-                </div>
+                </header>
 
                 {move || {
                     error
                         .get()
                         .map(|message| {
                             view! {
-                                <Alert
-                                    tone=Tone::Danger
-                                    title="Couldn't load the queue"
-                                    description=message
-                                    class="mb-6"
-                                />
+                                <p class="mb-10 border-l border-red-400/60 pl-4 text-sm text-red-200">
+                                    "Couldn't load the queue. "
+                                    <span class="text-red-200/70">{message}</span>
+                                </p>
                             }
                         })
                 }}
 
-                <div class="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <section class="mb-20">
+                    <SectionLabel num="01" label="Overview" />
+                    <div class="grid border-t border-white/10 sm:grid-cols-2 lg:grid-cols-4">
+                        {move || {
+                            view! {
+                                <QueueStat
+                                    label="Awaiting review"
+                                    value=count(BetaStatus::Requested)
+                                />
+                                <QueueStat
+                                    label="In paperwork"
+                                    value=count(BetaStatus::Accepted)
+                                />
+                                <QueueStat
+                                    label="Ready to approve"
+                                    value=ready_count.get()
+                                    detail="Signed, waiting on you"
+                                    highlight=true
+                                />
+                                <QueueStat
+                                    label="Approved"
+                                    value=count(BetaStatus::Approved)
+                                />
+                            }
+                        }}
+                    </div>
+                </section>
+
+                <section class="mb-20">
+                    <SectionLabel num="02" label="Applications" />
+                    <div class="mb-8 overflow-x-auto">
+                        <Tabs
+                            value=Signal::derive(move || filter.get())
+                            on_change=Callback::new(move |value| filter.set(value))
+                            items=tabs
+                        />
+                    </div>
+
                     {move || {
-                        view! {
-                            <Stat
-                                label="Awaiting review"
-                                value=count(BetaStatus::Requested).to_string()
-                                icon=icons::CLOCK
-                                tone=Tone::Info
-                            />
-                            <Stat
-                                label="In paperwork"
-                                value=count(BetaStatus::Accepted).to_string()
-                                icon=icons::FILE_TEXT
-                                tone=Tone::Info
-                            />
-                            <Stat
-                                label="Ready to approve"
-                                value=ready_count.get().to_string()
-                                detail="Signed, waiting on you"
-                                icon=icons::PENCIL
-                                tone=Tone::Warning
-                            />
-                            <Stat
-                                label="Approved"
-                                value=count(BetaStatus::Approved).to_string()
-                                icon=icons::CIRCLE_CHECK
-                                tone=Tone::Accent
-                            />
+                        if applications.with(Option::is_none) {
+                            return view! {
+                                <p class=cn!("border-t border-white/10 py-8", EYEBROW)>
+                                    "Loading…"
+                                </p>
+                            }
+                                .into_any();
                         }
-                    }}
-                </div>
-
-                <div class="mb-6 overflow-x-auto">
-                    <Tabs
-                        value=Signal::derive(move || filter.get())
-                        on_change=Callback::new(move |value| filter.set(value))
-                        items=tabs
-                    />
-                </div>
-
-                {move || {
-                    if applications.with(Option::is_none) {
-                        return view! {
-                            <div class="space-y-3">
-                                <Skeleton class="h-24 w-full rounded-2xl" />
-                                <Skeleton class="h-24 w-full rounded-2xl" />
-                                <Skeleton class="h-24 w-full rounded-2xl" />
+                        let rows = visible.get();
+                        if rows.is_empty() {
+                            return view! {
+                                <p class="border-t border-white/10 py-8 font-light text-white/55">
+                                    "No applications match this filter yet."
+                                </p>
+                            }
+                                .into_any();
+                        }
+                        view! {
+                            <div class=cn!("flex items-center gap-4 pb-3", EYEBROW)>
+                                <span class="flex-1">"Applicant"</span>
+                                <span>"Score"</span>
+                                <span class="w-4"></span>
+                            </div>
+                            <div class="border-b border-white/10">
+                                {rows
+                                    .into_iter()
+                                    .map(|application| {
+                                        view! {
+                                            <ApplicationCard
+                                                application=application
+                                                expanded=expanded
+                                                on_changed=Callback::new(move |()| {
+                                                    expanded.set(None);
+                                                    refresh();
+                                                })
+                                            />
+                                        }
+                                    })
+                                    .collect_view()}
                             </div>
                         }
-                            .into_any();
-                    }
-                    let rows = visible.get();
-                    if rows.is_empty() {
-                        return view! {
-                            <EmptyState
-                                icon=icons::USERS
-                                title="Nothing here"
-                                description="No applications match this filter yet."
-                            />
-                        }
-                            .into_any();
-                    }
-                    view! {
-                        <div class="space-y-3">
-                            {rows
-                                .into_iter()
-                                .map(|application| {
-                                    view! {
-                                        <ApplicationCard
-                                            application=application
-                                            expanded=expanded
-                                            on_changed=Callback::new(move |()| {
-                                                expanded.set(None);
-                                                refresh();
-                                            })
-                                        />
-                                    }
-                                })
-                                .collect_view()}
-                        </div>
-                    }
-                        .into_any()
-                }}
+                            .into_any()
+                    }}
+                </section>
             </div>
         </AnimatedPage>
     }
@@ -463,10 +471,12 @@ fn ApplicationCard(
     let submitted = application.submitted_at.clone();
 
     view! {
-        <Panel highlighted=open class="overflow-hidden">
+        <div class=move || {
+            cn!("border-t border-white/10 transition-colors", open.get().then_some("bg-white/[0.02]"))
+        }>
             <button
                 type="button"
-                class="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-white/[0.03]"
+                class="group relative flex w-full items-center gap-4 py-4 text-left transition-colors hover:bg-white/[0.03]"
                 on:click=move |_| {
                     expanded
                         .update(|current| {
@@ -478,30 +488,23 @@ fn ApplicationCard(
                         });
                 }
             >
+                <HoverRule />
                 <div class="min-w-0 flex-1">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <span class="truncate font-semibold text-white">{header_name}</span>
-                        <Badge tone=status_tone(status) size=Size::Xs>
-                            {status_label(status)}
-                        </Badge>
+                    <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                        <span class="truncate text-base font-medium text-white">{header_name}</span>
+                        <span class=cn!(TAG, status_color(status))>{status_label(status)}</span>
                         {(documents_complete && status == BetaStatus::Accepted)
                             .then(|| {
                                 view! {
-                                    <Badge tone=Tone::Warning size=Size::Xs icon=icons::PENCIL>
-                                        "Ready to approve"
-                                    </Badge>
+                                    <span class=cn!(TAG, "text-amber-300")>"Ready to approve"</span>
                                 }
                             })}
                         {(documents_complete && status == BetaStatus::Approved)
                             .then(|| {
-                                view! {
-                                    <Badge tone=Tone::Accent size=Size::Xs icon=icons::FILE_TEXT>
-                                        "Signed"
-                                    </Badge>
-                                }
+                                view! { <span class=cn!(TAG, "text-accent-300")>"Signed"</span> }
                             })}
                     </div>
-                    <div class="mt-1 truncate text-xs text-white/45">
+                    <div class="mt-1 truncate font-mono text-[11px] text-white/45">
                         {format!(
                             "{header_discord} · {header_timezone} · applied {}",
                             stamp(&submitted),
@@ -511,10 +514,10 @@ fn ApplicationCard(
 
                 <div class="shrink-0 text-right">
                     <div class=cn!(
-                        "text-lg font-semibold tabular-nums",
-                        if score.percent >= 70 { "text-emerald-300" } else { "text-white/70" },
+                        "text-2xl font-extralight tabular-nums",
+                        if score.percent >= 70 { "text-accent-300" } else { "text-white/70" },
                     )>{format!("{}%", score.percent)}</div>
-                    <div class="text-[11px] text-white/35">
+                    <div class="font-mono text-[11px] text-white/35">
                         {format!("{}/{}", score.correct, score.total)}
                     </div>
                 </div>
@@ -529,8 +532,8 @@ fn ApplicationCard(
             </button>
 
             <Show when=move || open.get()>
-                <div class="space-y-6 border-t border-white/[0.06] px-5 py-6">
-                    <div class="grid gap-3 sm:grid-cols-2">
+                <div class="space-y-12 border-t border-white/10 py-8 md:pl-6">
+                    <dl class="grid gap-x-10 sm:grid-cols-2">
                         <DetailRow label="Email" value=email.get_value() />
                         <DetailRow label="Discord" value=discord.get_value() />
                         <DetailRow label="Timezone" value=timezone.get_value() />
@@ -541,25 +544,22 @@ fn ApplicationCard(
                             .map(|at| {
                                 view! { <DetailRow label="Decided" value=stamp(&at) /> }
                             })}
-                    </div>
+                    </dl>
 
                     <section>
-                        <SectionHeading icon=icons::MESSAGE_CIRCLE text="Why we should choose them" />
-                        <Well class="p-4 text-sm leading-6 whitespace-pre-wrap text-white/75">
+                        <SectionHeading text="Why we should choose them" />
+                        <p class="max-w-3xl border-l border-white/15 pl-5 text-sm leading-relaxed font-light whitespace-pre-wrap text-white/75">
                             {why_you.get_value()}
-                        </Well>
+                        </p>
                     </section>
 
                     <section>
-                        <SectionHeading
-                            icon=icons::GAUGE
-                            text=format!(
-                                "Systems check — {}/{} correct",
-                                score.correct,
-                                score.total,
-                            )
-                        />
-                        <div class="space-y-2">
+                        <SectionHeading text=format!(
+                            "Systems check — {}/{} correct",
+                            score.correct,
+                            score.total,
+                        ) />
+                        <div class="border-b border-white/10">
                             {answers
                                 .get_value()
                                 .into_iter()
@@ -570,21 +570,21 @@ fn ApplicationCard(
 
                     <Show when=move || !open_answers.with_value(Vec::is_empty)>
                         <section>
-                            <SectionHeading icon=icons::MESSAGE_CIRCLE text="In their words" />
-                            <div class="space-y-3">
+                            <SectionHeading text="In their words" />
+                            <div class="border-b border-white/10">
                                 {open_answers
                                     .get_value()
                                     .into_iter()
                                     .map(|answer| {
                                         view! {
-                                            <div class="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
+                                            <div class="border-t border-white/10 py-4">
                                                 <div class="text-xs leading-5 text-white/45">
                                                     {answer
                                                         .prompt
                                                         .clone()
                                                         .unwrap_or_else(|| answer.question_id.clone())}
                                                 </div>
-                                                <div class="mt-1.5 text-sm leading-6 whitespace-pre-wrap text-white/80">
+                                                <div class="mt-1.5 text-sm leading-relaxed font-light whitespace-pre-wrap text-white/80">
                                                     {if answer.answer.trim().is_empty() {
                                                         "— left blank —".to_string()
                                                     } else {
@@ -601,8 +601,8 @@ fn ApplicationCard(
 
                     <Show when=move || !signatures.with_value(Vec::is_empty)>
                         <section>
-                            <SectionHeading icon=icons::FILE_TEXT text="Signatures" />
-                            <div class="space-y-2">
+                            <SectionHeading text="Signatures" />
+                            <div class="border-b border-white/10">
                                 {move || {
                                     // Once the detail call has run, prefer its
                                     // signatures — they carry the presigned ink.
@@ -618,10 +618,10 @@ fn ApplicationCard(
                                         .collect_view()
                                 }}
                             </div>
-                            <div class="mt-3 flex flex-wrap gap-2">
+                            <div class="mt-5 flex flex-wrap gap-2">
                                 <Show when=move || detail.with(Option::is_none)>
                                     <Button
-                                        variant=Variant::Glass
+                                        variant=Variant::Ghost
                                         size=Size::Sm
                                         icon=icons::EYE
                                         on_click=Callback::new(load_detail)
@@ -630,7 +630,7 @@ fn ApplicationCard(
                                     </Button>
                                 </Show>
                                 <Button
-                                    variant=Variant::Glass
+                                    variant=Variant::Ghost
                                     size=Size::Sm
                                     icon=icons::DOWNLOAD
                                     loading=exporting
@@ -657,7 +657,7 @@ fn ApplicationCard(
                                     "Contract only"
                                 </Button>
                             </div>
-                            <p class="mt-2 text-xs leading-5 text-white/35">
+                            <p class="mt-3 max-w-2xl text-xs leading-5 font-light text-white/40">
                                 "The PDF carries the document text as signed, the signer's legal name and address, their signature, and the audit trail — timestamp, IP, and the hash of the exact wording they agreed to."
                             </p>
                         </section>
@@ -679,7 +679,7 @@ fn ApplicationCard(
                                 (!parts.is_empty())
                                     .then(|| {
                                         view! {
-                                            <div class="text-xs leading-5 text-white/35">
+                                            <div class="font-mono text-[11px] leading-5 break-all text-white/35">
                                                 {format!("Applied from {}", parts.join(" · "))}
                                             </div>
                                         }
@@ -692,7 +692,10 @@ fn ApplicationCard(
                             .get()
                             .map(|message| {
                                 view! {
-                                    <Alert tone=Tone::Danger title="Decision failed" description=message />
+                                    <p class="border-l border-red-400/60 pl-4 text-sm text-red-200">
+                                        "Decision failed. "
+                                        <span class="text-red-200/70">{message}</span>
+                                    </p>
                                 }
                             })
                     }}
@@ -701,17 +704,16 @@ fn ApplicationCard(
                             .get()
                             .map(|message| {
                                 view! {
-                                    <Alert
-                                        tone=Tone::Warning
-                                        title="Partly applied"
-                                        description=message
-                                    />
+                                    <p class="border-l border-amber-400/60 pl-4 text-sm font-light text-amber-200/90">
+                                        "Partly applied. "
+                                        <span class="text-amber-200/70">{message}</span>
+                                    </p>
                                 }
                             })
                     }}
 
                     <section>
-                        <SectionHeading icon=icons::PENCIL text="Decision" />
+                        <SectionHeading text="Decision" />
                         <Field
                             label="Note (optional)"
                             hint="Shown to the applicant on the beta page. Worth writing for a rejection."
@@ -779,11 +781,11 @@ fn ApplicationCard(
                                 </Button>
                             </Show>
                         </div>
-                        <p class="mt-3 text-xs leading-5 text-white/35">
+                        <p class="mt-4 max-w-2xl text-xs leading-5 font-light text-white/40">
                             "Accepting only unlocks the NDA and test agreement on their beta page — it grants nothing. The Auth0 beta role is assigned on approval, once both documents are signed, and removed by any other decision."
                         </p>
 
-                        <div class="mt-6 flex flex-wrap items-center gap-3 border-t border-white/[0.06] pt-5">
+                        <div class="mt-8 flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center">
                             <Button
                                 variant=Variant::Ghost
                                 tone=Tone::Danger
@@ -791,10 +793,11 @@ fn ApplicationCard(
                                 icon=icons::TRASH_2
                                 disabled=busy
                                 on_click=Callback::new(move |()| confirm_remove.set(true))
+                                class="shrink-0 self-start"
                             >
                                 "Remove application"
                             </Button>
-                            <span class="text-xs leading-5 text-white/35">
+                            <span class="max-w-2xl text-xs leading-5 font-light text-white/40">
                                 "Deletes the record and signatures and revokes the role, so the account can apply again from scratch. For putting a test account back to square one — reject a real applicant instead, so the evidence survives."
                             </span>
                         </div>
@@ -814,16 +817,40 @@ fn ApplicationCard(
                     </section>
                 </div>
             </Show>
-        </Panel>
+        </div>
     }
 }
 
+/// One figure in the overview strip.
 #[component]
-fn SectionHeading(icon: IconData, #[prop(into)] text: String) -> impl IntoView {
+fn QueueStat(
+    label: &'static str,
+    value: usize,
+    #[prop(optional)] detail: Option<&'static str>,
+    #[prop(optional)] highlight: bool,
+) -> impl IntoView {
     view! {
-        <div class="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-white/45">
-            <Icon icon=icon class="h-4 w-4 text-accent-400" />
-            {text}
+        <div class="border-b border-white/10 py-6 sm:pr-8">
+            <p class=EYEBROW>{label}</p>
+            <p class=cn!(
+                "mt-3 text-5xl font-extralight tabular-nums",
+                if highlight && value > 0 { "text-amber-300" } else { "text-white" },
+            )>{format!("{value:02}")}</p>
+            {detail
+                .map(|detail| {
+                    view! { <p class="mt-2 font-mono text-[11px] text-white/40">{detail}</p> }
+                })}
+        </div>
+    }
+}
+
+/// Mono label with a hairline, for the subsections inside an expanded row.
+#[component]
+fn SectionHeading(#[prop(into)] text: String) -> impl IntoView {
+    view! {
+        <div class=cn!("mb-5 flex items-center gap-4", EYEBROW)>
+            <span>{text}</span>
+            <span class="h-px flex-1 bg-white/10"></span>
         </div>
     }
 }
@@ -834,11 +861,11 @@ fn DetailRow(#[prop(into)] label: String, #[prop(into)] value: String) -> impl I
     // so keep the whole thing on the tooltip.
     let title = value.clone();
     view! {
-        <div class="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
-            <div class="text-[11px] uppercase tracking-[0.14em] text-white/40">{label}</div>
-            <div class="mt-0.5 truncate text-sm text-white/85" title=title>
+        <div class="grid grid-cols-[8rem_1fr] items-baseline gap-4 border-t border-white/10 py-3">
+            <dt class="font-mono text-[11px] tracking-[0.2em] text-white/45 uppercase">{label}</dt>
+            <dd class="truncate text-sm font-light text-white/85" title=title>
                 {value}
-            </div>
+            </dd>
         </div>
     }
 }
@@ -852,60 +879,53 @@ fn AnswerRow(answer: api::AdminAnswer) -> impl IntoView {
         .unwrap_or_else(|| "Left blank".to_string());
 
     view! {
-        <div class=cn!(
-            "rounded-xl border px-4 py-3",
-            if correct {
-                "border-emerald-400/20 bg-emerald-500/[0.05]"
-            } else {
-                "border-red-400/20 bg-red-500/[0.05]"
-            },
-        )>
-            <div class="flex items-start gap-3">
-                <Icon
-                    icon=if correct { icons::CIRCLE_CHECK } else { icons::CIRCLE_X }
-                    class=cn!(
-                        "mt-0.5 h-4 w-4 shrink-0",
-                        if correct { "text-emerald-300" } else { "text-red-300" },
-                    )
-                />
-                <div class="min-w-0 flex-1">
+        <div class="flex items-start gap-4 border-t border-white/10 py-4">
+            <Icon
+                icon=if correct { icons::CIRCLE_CHECK } else { icons::CIRCLE_X }
+                class=cn!(
+                    "mt-0.5 h-4 w-4 shrink-0",
+                    if correct { "text-accent-300" } else { "text-red-300" },
+                )
+            />
+            <div class="min-w-0 flex-1">
+                {answer
+                    .topic
+                    .clone()
+                    .map(|topic| {
+                        view! {
+                            <div class="mb-1 font-mono text-[11px] tracking-[0.2em] text-white/35 uppercase">
+                                {topic}
+                            </div>
+                        }
+                    })}
+                <div class="text-sm font-medium text-white/85">
+                    {answer.prompt.clone().unwrap_or_else(|| answer.question_id.clone())}
+                </div>
+                <div class="mt-1 text-sm leading-6 font-light text-white/60">
+                    {format!("Answered: {chosen}")}
+                </div>
+                <Show when=move || !correct>
                     {answer
-                        .topic
+                        .correct_choice
                         .clone()
-                        .map(|topic| {
+                        .map(|right| {
                             view! {
-                                <div class="text-[11px] uppercase tracking-[0.14em] text-white/35">
-                                    {topic}
+                                <div class="mt-0.5 text-sm leading-6 font-light text-accent-300/90">
+                                    {format!("Correct: {right}")}
                                 </div>
                             }
                         })}
-                    <div class="text-sm font-medium text-white/85">
-                        {answer.prompt.clone().unwrap_or_else(|| answer.question_id.clone())}
-                    </div>
-                    <div class="mt-1 text-sm leading-6 text-white/60">
-                        {format!("Answered: {chosen}")}
-                    </div>
-                    <Show when=move || !correct>
-                        {answer
-                            .correct_choice
-                            .clone()
-                            .map(|right| {
-                                view! {
-                                    <div class="mt-0.5 text-sm leading-6 text-emerald-300/80">
-                                        {format!("Correct: {right}")}
-                                    </div>
-                                }
-                            })}
-                        {answer
-                            .explanation
-                            .clone()
-                            .map(|why| {
-                                view! {
-                                    <div class="mt-1 text-xs leading-5 text-white/40">{why}</div>
-                                }
-                            })}
-                    </Show>
-                </div>
+                    {answer
+                        .explanation
+                        .clone()
+                        .map(|why| {
+                            view! {
+                                <div class="mt-1 text-xs leading-5 font-light text-white/40">
+                                    {why}
+                                </div>
+                            }
+                        })}
+                </Show>
             </div>
         </div>
     }
@@ -914,16 +934,20 @@ fn AnswerRow(answer: api::AdminAnswer) -> impl IntoView {
 #[component]
 fn SignatureRow(signature: AdminSignature) -> impl IntoView {
     view! {
-        <div class="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
-            <div class="flex flex-wrap items-center gap-2">
+        <div class="border-t border-white/10 py-5">
+            <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1">
                 <span class="text-sm font-medium text-white/85">
                     {signature.document_id.clone()}
                 </span>
-                <Badge tone=Tone::Neutral size=Size::Xs>
+                <span class="font-mono text-[11px] text-white/50">
                     {format!("v{}", signature.document_version)}
-                </Badge>
-                <Badge tone=Tone::Neutral size=Size::Xs>{signature.method.clone()}</Badge>
-                <span class="text-xs text-white/40">{stamp(&signature.signed_at)}</span>
+                </span>
+                <span class="font-mono text-[11px] tracking-[0.2em] text-white/50 uppercase">
+                    {signature.method.clone()}
+                </span>
+                <span class="font-mono text-[11px] text-white/40">
+                    {stamp(&signature.signed_at)}
+                </span>
             </div>
 
             {signature
@@ -931,7 +955,9 @@ fn SignatureRow(signature: AdminSignature) -> impl IntoView {
                 .clone()
                 .map(|name| {
                     view! {
-                        <div class="mt-1 text-sm text-white/60">{format!("Signed as {name}")}</div>
+                        <div class="mt-1 text-sm font-light text-white/60">
+                            {format!("Signed as {name}")}
+                        </div>
                     }
                 })}
 
@@ -953,7 +979,7 @@ fn SignatureRow(signature: AdminSignature) -> impl IntoView {
                         .collect::<Vec<_>>()
                         .join(", ");
                     view! {
-                        <div class="mt-2 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2 text-xs leading-5 text-white/55">
+                        <div class="mt-3 border-l border-white/15 pl-4 text-xs leading-5 font-light text-white/55">
                             <div class="font-medium text-white/75">{signer.legal_name}</div>
                             <div>{signer.email}</div>
                             {signer.phone.map(|phone| view! { <div>{phone}</div> })}
@@ -970,12 +996,12 @@ fn SignatureRow(signature: AdminSignature) -> impl IntoView {
                         <img
                             src=url
                             alt="Signature"
-                            class="mt-3 max-h-40 rounded-xl border border-white/10 bg-white"
+                            class="mt-4 max-h-40 rounded-sm border border-white/10 bg-white"
                         />
                     }
                 })}
 
-            <div class="mt-2 font-mono text-[11px] leading-5 break-all text-white/30">
+            <div class="mt-3 font-mono text-[11px] leading-5 break-all text-white/30">
                 {format!("receipt {}", signature.receipt_id)}
                 {signature
                     .document_hash

@@ -10,6 +10,7 @@ use super::links::{SITE_MANUALS, manual_path};
 use super::manuals;
 use super::reader::ManualReader;
 use crate::auth::use_auth;
+use crate::components::EYEBROW;
 use crate::nav;
 use crate::state::use_catalog;
 
@@ -99,7 +100,7 @@ pub fn ManualPage() -> impl IntoView {
             Gate::Missing => view! { <NotFound /> }.into_any(),
             Gate::Loading => {
                 view! {
-                    <div class="flex min-h-screen items-center justify-center text-white/60">
+                    <div class=cn!("flex min-h-screen items-center justify-center", EYEBROW)>
                         "Loading…"
                     </div>
                 }
@@ -107,9 +108,15 @@ pub fn ManualPage() -> impl IntoView {
             }
             Gate::Unavailable(message) => {
                 view! {
-                    <div class="flex min-h-screen flex-col items-center justify-center px-4 text-white">
-                        <h1 class="mb-2 text-2xl font-bold">"Catalog unavailable"</h1>
-                        <p class="mb-6 max-w-md text-center text-white/60">{message}</p>
+                    <div class="mx-auto flex min-h-screen max-w-6xl flex-col justify-center px-6 text-white md:px-10">
+                        <p class=cn!("mb-6", EYEBROW)>"Infinity / Manuals"</p>
+                        <h1 class="mb-4 text-4xl font-extralight tracking-tight md:text-5xl">
+                            "Catalog "
+                            <span class="font-semibold text-accent-300">"unavailable"</span>
+                        </h1>
+                        <p class="max-w-md border-l border-red-400/60 pl-4 font-light text-red-200">
+                            {message}
+                        </p>
                     </div>
                 }
                     .into_any()
@@ -122,15 +129,15 @@ pub fn ManualPage() -> impl IntoView {
                     // The navbar is a 4rem sticky bar inside the app's scroll container.
                     <div class="relative z-10 min-h-screen text-white" style="--manual-top-offset: 4rem">
                         <Show when=move || !released.get() && !catalog_loading.get()>
-                            <Alert
-                                tone=Tone::Dev
-                                icon=icons::FLASK_CONICAL
-                                title=format!(
-                                    "Developer preview. Not visible to public users until the {} is on the storefront.",
+                            <p class="mx-4 mt-6 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-l border-amber-400/60 pl-4 text-sm font-light text-amber-200/90 md:mx-8">
+                                <span class="font-mono text-[11px] tracking-[0.25em] text-amber-300 uppercase">
+                                    "Developer preview"
+                                </span>
+                                {format!(
+                                    "Not visible to public users until the {} is on the storefront.",
                                     aircraft_names(),
-                                )
-                                class="mx-4 mt-4 md:mx-8"
-                            />
+                                )}
+                            </p>
                         </Show>
                         <ManualReader
                             manual=manual
@@ -152,14 +159,24 @@ fn NotFound() -> impl IntoView {
     let go = nav::use_go();
 
     view! {
-        <div class="flex min-h-screen flex-col items-center justify-center px-4 text-white">
-            <h1 class="mb-2 text-3xl font-bold">"Manual not found"</h1>
-            <p class="mb-6 text-white/60">"This manual doesn't exist or isn't available."</p>
+        <div class="mx-auto flex min-h-screen max-w-6xl flex-col justify-center px-6 text-white md:px-10">
+            <p class=cn!("mb-6", EYEBROW)>"Infinity / Manuals"</p>
+            <h1 class="mb-4 text-4xl font-extralight tracking-tight md:text-5xl">
+                "Manual "
+                <span class="font-semibold text-accent-300">"not found"</span>
+            </h1>
+            <p class="mb-8 max-w-md border-l border-accent-400/40 pl-5 font-light text-white/60">
+                "This manual doesn't exist or isn't available."
+            </p>
             <button
                 type="button"
                 on:click=move |_| go.run(nav::AIRCRAFT.to_string())
-                class="rounded-lg bg-accent-600 px-6 py-2 text-white hover:bg-accent-700"
+                class="group inline-flex items-center gap-2 self-start text-lg font-medium transition-colors hover:text-accent-300"
             >
+                <Icon
+                    icon=icons::ARROW_LEFT
+                    class="h-4 w-4 transition-transform group-hover:-translate-x-1"
+                />
                 "Back to Aircraft"
             </button>
         </div>

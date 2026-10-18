@@ -29,8 +29,6 @@ pub const LIFE_BUOY: IconData = IconData::new(
 );
 
 pub const GLOW_NAV: &str = "drop-shadow(0px 0px 6px rgba(255, 255, 255, 0.6))";
-pub const GLOW_HERO: &str =
-    "drop-shadow(0 0 18px rgba(52, 211, 153, 0.45)) drop-shadow(0 0 6px rgba(255, 255, 255, 0.7))";
 
 #[component]
 pub fn InfinityMark(

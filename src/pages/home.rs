@@ -49,9 +49,7 @@ pub fn Home() -> impl IntoView {
                     duration=0.6
                     class="flex items-center gap-4 font-mono text-[11px] tracking-[0.25em] text-white/50 uppercase"
                 >
-                    <span>"Aero Dynamics"</span>
-                    <span class="h-px w-10 bg-white/20"></span>
-                    <span>"for MSFS 2024"</span>
+                    <span>"By Aero Dynamics"</span>
                 </Reveal>
 
                 <div class="my-14 max-w-3xl">

@@ -4,12 +4,12 @@ use leptos::task::spawn_local;
 use super::legal::LINK;
 use crate::api::{self, AircraftProduct, MIN_PASSWORD_LENGTH, SupportTicket};
 use crate::auth::{User, use_auth};
-use crate::brand;
-use crate::components::DownloadButton;
+use crate::components::{DownloadButton, EYEBROW, HoverRule, SectionLabel};
 use crate::nav;
 use crate::state::{use_catalog, use_manager};
 
-const DISCORD_URL: &str = "https://discord.gg/HZt4MCEYZk";
+/// Row layout shared by the support table.
+const ROW: &str = "grid gap-2 border-t border-white/10 py-5 md:grid-cols-[14rem_1fr_auto] md:items-center md:gap-8";
 
 #[component]
 pub fn UserDashboard() -> impl IntoView {
@@ -21,8 +21,8 @@ pub fn UserDashboard() -> impl IntoView {
             fallback=|| {
                 view! {
                     <div class="flex min-h-screen items-center justify-center">
-                        <div class="flex flex-col items-center gap-3 text-white/60">
-                            <Spinner size=Size::Lg />
+                        <div class=cn!("flex items-center gap-3", EYEBROW)>
+                            <Spinner size=Size::Sm />
                             "Loading your account…"
                         </div>
                     </div>
@@ -40,19 +40,26 @@ pub fn UserDashboard() -> impl IntoView {
 fn LoginRequired() -> impl IntoView {
     let auth = use_auth();
     view! {
-        <AnimatedPage class="flex min-h-screen items-center justify-center px-4">
-            <Panel class="w-full max-w-md p-8 text-center">
-                <Icon icon=icons::CIRCLE_ALERT class="mx-auto mb-4 h-16 w-16 text-amber-400" />
-                <h2 class="mb-2 text-2xl font-bold text-white">"Login required"</h2>
-                <p class="mb-6 text-white/60">"Sign in to view your account dashboard."</p>
-                <Button
-                    variant=Variant::Solid
-                    icon=icons::LOG_IN
-                    on_click=Callback::new(move |()| auth.login())
-                >
-                    "Sign in"
-                </Button>
-            </Panel>
+        <AnimatedPage class="mx-auto flex min-h-screen max-w-6xl flex-col justify-center px-6 text-white md:px-10">
+            <p class=cn!("mb-6", EYEBROW)>"Infinity / Account"</p>
+            <h1 class="mb-4 text-4xl font-extralight tracking-tight md:text-5xl">
+                "Sign in "
+                <span class="font-semibold text-accent-300">"required."</span>
+            </h1>
+            <p class="mb-8 max-w-md border-l border-accent-400/40 pl-5 font-light text-white/60">
+                "Sign in to view your account dashboard."
+            </p>
+            <button
+                type="button"
+                on:click=move |_| auth.login()
+                class="group inline-flex items-center gap-2 self-start text-lg font-medium transition-colors hover:text-accent-300"
+            >
+                "Sign in"
+                <Icon
+                    icon=icons::ARROW_RIGHT
+                    class="h-4 w-4 transition-transform group-hover:translate-x-1"
+                />
+            </button>
         </AnimatedPage>
     }
 }
@@ -95,46 +102,40 @@ fn Dashboard() -> impl IntoView {
     let has_products = Signal::derive(move || total.get() > 0);
 
     view! {
-        <AnimatedPage class="min-h-screen px-4 py-12 text-white">
-            <div class="mx-auto max-w-5xl space-y-8">
-                <ProfileCard />
-                <SecurityCard />
-                <ManagerCard />
+        <AnimatedPage class="min-h-screen text-white">
+            <div class="mx-auto max-w-6xl px-6 py-10 md:px-10 md:py-14">
+                <ProfileHeader />
 
-                <section>
-                    <div class="mb-4 flex items-center justify-between">
-                        <h2 class="flex items-center gap-2 text-2xl font-bold">
-                            <Icon icon=icons::PACKAGE class="h-6 w-6 text-accent-400" />
-                            "Your products"
-                        </h2>
-                        <span class="text-sm text-white/40">
-                            {move || format!("{} owned", total.get())}
-                        </span>
-                    </div>
+                <section class="mb-20">
+                    <SectionLabel num="01" label="Your products" />
+                    <p class="-mt-4 mb-8 font-mono text-[11px] text-white/40">
+                        {move || format!("{:02} owned", total.get())}
+                    </p>
 
                     <Show
                         when=move || has_products.get()
                         fallback=move || {
                             view! {
-                                <EmptyState
-                                    icon=icons::PACKAGE
-                                    title="No products yet"
-                                    description="Browse our aircraft to get started — purchases land on your account automatically."
-                                >
-                                    <Button
-                                        variant=Variant::Solid
-                                        trailing_icon=icons::ARROW_RIGHT
-                                        on_click=Callback::new(move |()| {
-                                            go.run(nav::AIRCRAFT.to_string())
-                                        })
+                                <div class="border-t border-white/10 py-8">
+                                    <p class="mb-5 max-w-xl font-light text-white/60">
+                                        "No products yet. Browse our aircraft to get started — purchases land on your account automatically."
+                                    </p>
+                                    <button
+                                        type="button"
+                                        on:click=move |_| go.run(nav::AIRCRAFT.to_string())
+                                        class="group inline-flex items-center gap-2 text-lg font-medium transition-colors hover:text-accent-300"
                                     >
                                         "Browse aircraft"
-                                    </Button>
-                                </EmptyState>
+                                        <Icon
+                                            icon=icons::ARROW_RIGHT
+                                            class="h-4 w-4 transition-transform group-hover:translate-x-1"
+                                        />
+                                    </button>
+                                </div>
                             }
                         }
                     >
-                        <div class="grid gap-4 sm:grid-cols-2">
+                        <div class="grid gap-x-10 gap-y-12 sm:grid-cols-2">
                             {move || {
                                 owned
                                     .get()
@@ -152,8 +153,8 @@ fn Dashboard() -> impl IntoView {
                         </div>
                     </Show>
 
-                    <p class="mt-4 text-xs text-white/40">
-                        "Install and update your aircraft from inside the Infinity Manager above. Need a refund, or something not working? See the "
+                    <p class="mt-8 text-xs text-white/40">
+                        "Install and update your aircraft from inside the Infinity Manager below. Need a refund, or something not working? See the "
                         <a href=nav::LEGAL_REFUNDS class=LINK>
                             "refund policy"
                         </a>
@@ -161,32 +162,50 @@ fn Dashboard() -> impl IntoView {
                     </p>
                 </section>
 
-                <Panel class="p-6">
-                    <h3 class="mb-2 text-lg font-semibold">"Need help?"</h3>
-                    <p class="mb-4 text-sm text-white/60">
-                        "Join the Discord community for the fastest response, or open a ticket if you would rather email."
-                    </p>
-                    <ButtonGroup class="flex-wrap">
-                        <Button
-                            variant=Variant::Solid
-                            icon=icons::MESSAGE_CIRCLE
-                            href=DISCORD_URL
+                <ManagerSection />
+                <SecuritySection />
+
+                <section>
+                    <SectionLabel num="04" label="Support" />
+                    <div class="border-b border-white/10">
+                        <a
+                            href=nav::DISCORD_URL
                             target="_blank"
+                            rel="noopener noreferrer"
+                            class=cn!("group relative transition-colors hover:bg-white/[0.03]", ROW)
                         >
-                            "Join Discord"
-                        </Button>
-                        <Button
-                            variant=Variant::Glass
-                            icon=icons::MAIL
-                            on_click=Callback::new(move |()| support_open.set(true))
+                            <HoverRule />
+                            <h3 class="text-base font-medium">"Discord"</h3>
+                            <p class="text-sm font-light text-white/55">
+                                "The fastest way to get help from the team and community."
+                            </p>
+                            <RowAction label="Join Discord" icon=icons::ARROW_UP_RIGHT />
+                        </a>
+                        <button
+                            type="button"
+                            on:click=move |_| support_open.set(true)
+                            class=cn!("group relative text-left transition-colors hover:bg-white/[0.03]", ROW)
                         >
-                            "Email support"
-                        </Button>
-                        <Button variant=Variant::Glass icon=brand::RECEIPT href=nav::LEGAL_REFUNDS>
-                            "Refund Policy"
-                        </Button>
-                    </ButtonGroup>
-                </Panel>
+                            <HoverRule />
+                            <h3 class="text-base font-medium">"Email support"</h3>
+                            <p class="text-sm font-light text-white/55">
+                                "Open a ticket if you would rather talk over email."
+                            </p>
+                            <RowAction label="Open a ticket" icon=icons::ARROW_RIGHT />
+                        </button>
+                        <a
+                            href=nav::LEGAL_REFUNDS
+                            class=cn!("group relative transition-colors hover:bg-white/[0.03]", ROW)
+                        >
+                            <HoverRule />
+                            <h3 class="text-base font-medium">"Refund policy"</h3>
+                            <p class="text-sm font-light text-white/55">
+                                "When and how you can get your money back."
+                            </p>
+                            <RowAction label="Read the policy" icon=icons::ARROW_RIGHT />
+                        </a>
+                    </div>
+                </section>
             </div>
 
             <SupportModal open=support_open />
@@ -195,13 +214,24 @@ fn Dashboard() -> impl IntoView {
 }
 
 #[component]
-fn ProfileCard() -> impl IntoView {
+fn RowAction(label: &'static str, icon: IconData) -> impl IntoView {
+    view! {
+        <span class="inline-flex items-center gap-2 text-sm font-medium">
+            {label}
+            <Icon icon=icon class="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+        </span>
+    }
+}
+
+#[component]
+fn ProfileHeader() -> impl IntoView {
     let auth = use_auth();
     let user = Signal::derive(move || auth.user.get().unwrap_or_default());
 
     view! {
-        <Panel class="p-6 md:p-8">
-            <div class="flex flex-col gap-6 md:flex-row md:items-center">
+        <header class="mb-16">
+            <p class=cn!("mb-10", EYEBROW)>"Infinity / Account"</p>
+            <div class="flex flex-col gap-6 md:flex-row md:items-end">
                 {move || {
                     let user = user.get();
                     view! {
@@ -209,22 +239,20 @@ fn ProfileCard() -> impl IntoView {
                             name=user.display_name()
                             src=user.picture.clone()
                             size=Size::Lg
-                            class="h-20 w-20 border-2 border-white/15 text-2xl"
+                            class="h-20 w-20 border border-white/15 text-2xl"
                         />
                     }
                 }}
                 <div class="min-w-0 flex-1">
-                    <h1 class="truncate text-2xl font-bold md:text-3xl">
+                    <h1 class="truncate text-4xl leading-[1.05] font-extralight tracking-tight md:text-6xl">
                         {move || user.get().display_name()}
                     </h1>
-                    <p class="truncate text-white/60">
-                        {move || user.get().email.unwrap_or_default()}
-                    </p>
-                    <div class="mt-3 flex flex-wrap gap-2">
+                    <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px]">
+                        <span class="truncate text-white/50">
+                            {move || user.get().email.unwrap_or_default()}
+                        </span>
                         <Show when=move || auth.entitlements.get().is_developer()>
-                            <Badge tone=Tone::Dev icon=icons::FLASK_CONICAL squared=true>
-                                "Developer"
-                            </Badge>
+                            <span class="tracking-[0.2em] text-amber-300 uppercase">"Developer"</span>
                         </Show>
                         {move || {
                             auth.entitlements
@@ -234,31 +262,31 @@ fn ProfileCard() -> impl IntoView {
                                 .filter(|channel| channel != "stable")
                                 .map(|channel| {
                                     view! {
-                                        <Badge tone=Tone::Accent squared=true>
+                                        <span class="tracking-[0.2em] text-accent-300 uppercase">
                                             {channel}
-                                        </Badge>
+                                        </span>
                                     }
                                 })
                                 .collect_view()
                         }}
                     </div>
                 </div>
-                <Button
-                    variant=Variant::Glass
-                    icon=icons::LOG_OUT
-                    on_click=Callback::new(move |()| auth.logout())
-                    class="self-start md:self-center"
+                <button
+                    type="button"
+                    on:click=move |_| auth.logout()
+                    class="inline-flex items-center gap-2 self-start text-sm text-white/55 transition-colors hover:text-white md:self-end"
                 >
+                    <Icon icon=icons::LOG_OUT class="h-4 w-4" />
                     "Sign out"
-                </Button>
+                </button>
             </div>
-        </Panel>
+        </header>
     }
 }
 
 /// Password change - handled remotely, we are just passing it to worker
 #[component]
-fn SecurityCard() -> impl IntoView {
+fn SecuritySection() -> impl IntoView {
     let auth = use_auth();
     let current = RwSignal::new(String::new());
     let next = RwSignal::new(String::new());
@@ -325,125 +353,115 @@ fn SecurityCard() -> impl IntoView {
     };
 
     view! {
-        <Panel class="p-6">
-            <div class="flex gap-5">
-                <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-accent-400/30 bg-accent-500/15">
-                    <Icon icon=icons::KEY_ROUND class="h-6 w-6 text-accent-300" />
-                </div>
-                <div class="min-w-0 flex-1">
-                    <Show
-                        when=move || database_account.get()
-                        fallback=move || {
-                            view! {
-                                <h2 class="text-lg font-semibold">"Password"</h2>
-                                <p class="mt-1 text-sm text-white/60">
-                                    {move || {
-                                        format!(
-                                            "You sign in with {}, so your password is managed there. Change it from your {} account settings.",
-                                            provider.get(),
-                                            provider.get(),
-                                        )
-                                    }}
-                                </p>
-                            }
-                        }
-                    >
-                        <div class="flex items-start justify-between gap-4">
-                            <div>
-                                <h2 class="text-lg font-semibold">"Password"</h2>
-                                <p class="mt-1 text-sm text-white/60">
-                                    "Enter your current password, then choose a new one."
-                                </p>
-                            </div>
+        <section class="mb-20">
+            <SectionLabel num="03" label="Password" />
+            <Show
+                when=move || database_account.get()
+                fallback=move || {
+                    view! {
+                        <p class="max-w-2xl border-l border-accent-400/40 pl-5 text-sm leading-relaxed font-light text-white/60">
                             {move || {
-                                let (glyph, label) = if reveal.get() {
-                                    (icons::EYE_OFF, "Hide")
-                                } else {
-                                    (icons::EYE, "Show")
-                                };
-                                view! {
-                                    <Button
-                                        variant=Variant::Ghost
-                                        size=Size::Xs
-                                        icon=glyph
-                                        on_click=Callback::new(move |()| {
-                                            reveal.update(|v| *v = !*v)
-                                        })
-                                    >
-                                        {label}
-                                    </Button>
-                                }
+                                format!(
+                                    "You sign in with {}, so your password is managed there. Change it from your {} account settings.",
+                                    provider.get(),
+                                    provider.get(),
+                                )
                             }}
-                        </div>
-
-                        <Show when=move || done.get()>
-                            <Alert
-                                tone=Tone::Accent
-                                title="Password changed"
-                                description="You are still signed in here. Use the new password next time you sign in, including in the Infinity Manager."
-                                class="mt-4"
-                            />
-                        </Show>
-                        {move || {
-                            error
-                                .get()
-                                .map(|message| {
-                                    view! {
-                                        <Alert
-                                            tone=Tone::Danger
-                                            title="Not changed"
-                                            description=message
-                                            class="mt-4"
-                                        />
-                                    }
+                        </p>
+                    }
+                }
+            >
+                <div class="flex items-start justify-between gap-4">
+                    <p class="text-sm font-light text-white/60">
+                        "Enter your current password, then choose a new one."
+                    </p>
+                    {move || {
+                        let (glyph, label) = if reveal.get() {
+                            (icons::EYE_OFF, "Hide")
+                        } else {
+                            (icons::EYE, "Show")
+                        };
+                        view! {
+                            <Button
+                                variant=Variant::Ghost
+                                size=Size::Xs
+                                icon=glyph
+                                on_click=Callback::new(move |()| {
+                                    reveal.update(|v| *v = !*v)
                                 })
-                        }}
-
-                        <div class="mt-4 grid gap-3 sm:grid-cols-3">
-                            <Field label="Current password">
-                                <TextInput
-                                    value=current
-                                    on_input=Callback::new(move |v| current.set(v))
-                                    input_type=field_type
-                                    disabled=saving
-                                />
-                            </Field>
-                            <Field label="New password">
-                                <TextInput
-                                    value=next
-                                    on_input=Callback::new(move |v| next.set(v))
-                                    input_type=field_type
-                                    disabled=saving
-                                />
-                            </Field>
-                            <Field label="Confirm new password">
-                                <TextInput
-                                    value=confirm
-                                    on_input=Callback::new(move |v| confirm.set(v))
-                                    input_type=field_type
-                                    disabled=saving
-                                />
-                            </Field>
-                            <div class="flex justify-end sm:col-span-3">
-                                <Button
-                                    variant=Variant::Solid
-                                    loading=saving
-                                    disabled=incomplete
-                                    on_click=Callback::new(submit)
-                                >
-                                    "Change password"
-                                </Button>
-                            </div>
-                        </div>
-                    </Show>
+                            >
+                                {label}
+                            </Button>
+                        }
+                    }}
                 </div>
-            </div>
-        </Panel>
+
+                <Show when=move || done.get()>
+                    <Alert
+                        tone=Tone::Accent
+                        title="Password changed"
+                        description="You are still signed in here. Use the new password next time you sign in, including in the Infinity Manager."
+                        class="mt-4"
+                    />
+                </Show>
+                {move || {
+                    error
+                        .get()
+                        .map(|message| {
+                            view! {
+                                <Alert
+                                    tone=Tone::Danger
+                                    title="Not changed"
+                                    description=message
+                                    class="mt-4"
+                                />
+                            }
+                        })
+                }}
+
+                <div class="mt-6 grid gap-4 sm:grid-cols-3">
+                    <Field label="Current password">
+                        <TextInput
+                            value=current
+                            on_input=Callback::new(move |v| current.set(v))
+                            input_type=field_type
+                            disabled=saving
+                        />
+                    </Field>
+                    <Field label="New password">
+                        <TextInput
+                            value=next
+                            on_input=Callback::new(move |v| next.set(v))
+                            input_type=field_type
+                            disabled=saving
+                        />
+                    </Field>
+                    <Field label="Confirm new password">
+                        <TextInput
+                            value=confirm
+                            on_input=Callback::new(move |v| confirm.set(v))
+                            input_type=field_type
+                            disabled=saving
+                        />
+                    </Field>
+                    <div class="flex justify-end sm:col-span-3">
+                        <Button
+                            variant=Variant::Solid
+                            loading=saving
+                            disabled=incomplete
+                            on_click=Callback::new(submit)
+                        >
+                            "Change password"
+                        </Button>
+                    </div>
+                </div>
+            </Show>
+        </section>
     }
 }
 
 #[component]
-fn ManagerCard() -> impl IntoView {
+fn ManagerSection() -> impl IntoView {
     let manager = use_manager();
     let version = manager.version();
     let platforms = manager.platforms();
@@ -451,47 +469,43 @@ fn ManagerCard() -> impl IntoView {
     let error = manager.0.error;
 
     view! {
-        <Show
-            when=move || error.with(Option::is_none)
-            fallback=move || {
-                view! {
-                    <Alert
-                        tone=Tone::Danger
-                        title="Couldn't load the latest Infinity Manager release"
-                        description=error.get().unwrap_or_default()
-                    />
+        <section class="mb-20">
+            <SectionLabel num="02" label="Infinity Manager" />
+            <Show
+                when=move || error.with(Option::is_none)
+                fallback=move || {
+                    view! {
+                        <p class="border-l border-red-400/60 pl-4 text-sm text-red-200">
+                            "Couldn't load the latest Infinity Manager release. "
+                            <span class="text-red-200/70">{move || error.get().unwrap_or_default()}</span>
+                        </p>
+                    }
                 }
-            }
-        >
-            <Panel class="p-6 md:p-7">
-                <div class="flex flex-col gap-5 md:flex-row md:items-center">
-                    <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-accent-400/30 bg-accent-500/15">
-                        <Icon icon=icons::CPU class="h-7 w-7 text-accent-300" />
-                    </div>
-                    <div class="min-w-0 flex-1">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <h2 class="text-xl font-bold">"Infinity Manager"</h2>
+            >
+                <div class="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+                    <div class="max-w-xl">
+                        <p class="text-sm leading-relaxed font-light text-white/60">
+                            "Install and update your aircraft with the latest manager. Already installed? Updates download automatically."
+                        </p>
+                        <p class="mt-3 font-mono text-[11px] text-white/40">
                             {move || {
                                 version
                                     .get()
                                     .map(|v| {
                                         view! {
-                                            <Badge tone=Tone::Accent squared=true>
-                                                {format!("v{v}")}
-                                            </Badge>
+                                            "Latest release  /  "
+                                            <span class="text-accent-300">{format!("v{v}")}</span>
+                                            "  /  "
                                         }
                                     })
                             }}
-                            <Badge tone=Tone::Accent squared=true>"Auto-updating"</Badge>
-                        </div>
-                        <p class="mt-1 text-sm text-white/60">
-                            "Install and update your aircraft with the latest manager. Already installed? Updates download automatically."
+                            "Auto-updating"
                         </p>
                     </div>
                     <DownloadButton platforms=platforms loading=loading class="shrink-0" />
                 </div>
-            </Panel>
-        </Show>
+            </Show>
+        </section>
     }
 }
 
@@ -499,29 +513,25 @@ fn ManagerCard() -> impl IntoView {
 fn OwnedProduct(product: AircraftProduct) -> impl IntoView {
     let go = nav::use_go();
     let href = format!("{}/{}", nav::AIRCRAFT, product.slug);
-    let open_href = href.clone();
     let openable = product.storefront;
 
     view! {
-        <Panel class="group flex flex-col overflow-hidden">
-            <button
-                type="button"
-                disabled=!openable
-                on:click=move |_| {
-                    if openable {
-                        go.run(href.clone());
-                    }
+        <button
+            type="button"
+            disabled=!openable
+            on:click=move |_| {
+                if openable {
+                    go.run(href.clone());
                 }
-                class="relative aspect-video overflow-hidden bg-white/5 disabled:cursor-default"
-            >
+            }
+            class="group flex flex-col text-left disabled:cursor-default"
+        >
+            <div class="relative aspect-video overflow-hidden rounded-sm border border-white/10 bg-white/5">
                 <img
                     src=product.card_image.clone()
                     alt=product.name.clone()
-                    class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                    class="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
                 />
-                <span class="absolute top-3 left-3">
-                    <Badge tone=Tone::Accent squared=true>"Owned"</Badge>
-                </span>
                 {product
                     .dev_only
                     .then(|| {
@@ -533,26 +543,27 @@ fn OwnedProduct(product: AircraftProduct) -> impl IntoView {
                             </span>
                         }
                     })}
-            </button>
-            <div class="flex flex-1 items-start justify-between gap-3 p-5">
+            </div>
+            <div class="relative mt-4 flex flex-1 items-end justify-between gap-3 border-t border-white/10 pt-4">
+                {openable.then(|| view! { <HoverRule /> })}
                 <div class="min-w-0">
-                    <h3 class="truncate text-lg leading-tight font-bold">{product.name.clone()}</h3>
-                    <p class="truncate text-sm text-accent-300">{product.developer.clone()}</p>
+                    <p class="mb-2 font-mono text-[11px] tracking-[0.2em] text-accent-400/80 uppercase">
+                        "Owned"
+                    </p>
+                    <h3 class="truncate text-xl font-medium tracking-tight">{product.name.clone()}</h3>
+                    <p class="truncate text-sm font-light text-white/45">{product.developer.clone()}</p>
                 </div>
                 {openable
                     .then(|| {
                         view! {
-                            <IconButton
-                                icon=icons::EXTERNAL_LINK
-                                label="View product page"
-                                variant=Variant::Glass
-                                size=Size::Sm
-                                on_click=Callback::new(move |()| go.run(open_href.clone()))
+                            <Icon
+                                icon=icons::ARROW_RIGHT
+                                class="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-1"
                             />
                         }
                     })}
             </div>
-        </Panel>
+        </button>
     }
 }
 
@@ -576,18 +587,18 @@ fn UnmatchedEntitlement(id: String) -> impl IntoView {
         .join(" ");
 
     view! {
-        <Panel class="flex flex-col overflow-hidden">
-            <div class="relative flex aspect-video items-center justify-center bg-gradient-to-br from-accent-900/40 via-black/40 to-black/20">
-                <Icon icon=icons::PACKAGE class="h-12 w-12 text-accent-300/60" />
-                <span class="absolute top-3 left-3">
-                    <Badge tone=Tone::Accent squared=true>"Owned"</Badge>
-                </span>
+        <div class="flex flex-col">
+            <div class="flex aspect-video items-center justify-center rounded-sm border border-dashed border-white/15">
+                <span class=EYEBROW>"No preview"</span>
             </div>
-            <div class="flex flex-1 flex-col gap-1 p-5">
-                <h3 class="text-lg leading-tight font-bold">{title}</h3>
-                <p class="font-mono text-xs text-white/50">{id}</p>
+            <div class="mt-4 border-t border-white/10 pt-4">
+                <p class="mb-2 font-mono text-[11px] tracking-[0.2em] text-accent-400/80 uppercase">
+                    "Owned"
+                </p>
+                <h3 class="text-xl font-medium tracking-tight">{title}</h3>
+                <p class="font-mono text-[11px] text-white/40">{id}</p>
             </div>
-        </Panel>
+        </div>
     }
 }
 

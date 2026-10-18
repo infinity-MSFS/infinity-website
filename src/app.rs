@@ -6,7 +6,7 @@ use leptos_router::path;
 
 use crate::auth::{provide_auth, use_auth};
 use crate::background;
-use crate::brand::{COPYRIGHT_YEAR, GLOW_NAV, InfinityMark, PUBLISHER};
+use crate::brand::{COPYRIGHT_YEAR, InfinityMark, PUBLISHER};
 use crate::nav;
 use crate::pages;
 use crate::state::provide_remote_state;
@@ -107,14 +107,15 @@ fn SiteNav() -> impl IntoView {
 
     view! {
         <TopNav
-            class="shrink-0"
+            // `site-nav` scopes the tab overrides in input.css.
+            class="site-nav shrink-0"
             items=items
             active=active
             on_select=go
             brand=ViewFn::from(|| {
                 view! {
-                    <InfinityMark class="w-9 h-9" glow=GLOW_NAV />
-                    <span class="hidden sm:inline">"Infinity"</span>
+                    <InfinityMark class="h-7 w-7" glow="none" />
+                    <span class="hidden text-lg font-light tracking-tight sm:inline">"Infinity"</span>
                 }
             })
             actions=ViewFn::from(move || {

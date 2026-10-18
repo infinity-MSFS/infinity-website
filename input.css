@@ -59,3 +59,33 @@ body {
 		transition: none;
 	}
 }
+
+/* Site nav. The bar is infinity-ui's TopNav, which hard-codes its tab and
+   underline classes; these restyle them to the site's mono/hairline look
+   without forking the component. Scoped to `.site-nav` (set in app.rs) and
+   declared after the utilities so equal-specificity hover rules lose. */
+.site-nav [data-topnav-tab] {
+	border-radius: 0;
+	background: transparent;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 11px;
+	font-weight: 400;
+	letter-spacing: 0.25em;
+	text-transform: uppercase;
+	color: rgb(255 255 255 / 0.5);
+}
+
+.site-nav [data-topnav-tab]:hover {
+	background: transparent;
+	color: rgb(255 255 255 / 0.85);
+}
+
+.site-nav [data-topnav-tab][data-active="true"] {
+	color: #fff;
+}
+
+/* The sliding underline: the only bottom-pinned child of the bar's row. */
+.site-nav > div > div.bottom-0 {
+	height: 1px;
+	background-color: rgb(var(--ac-400));
+}

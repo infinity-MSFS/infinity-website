@@ -148,6 +148,76 @@ pub fn BetaAdmin() -> impl IntoView {
     }
 }
 
+/// How the last forced resync went, listing anyone it couldn't fix.
+#[component]
+fn ResyncNotice(result: Result<api::ResyncOutcome, String>) -> impl IntoView {
+    let outcome = match result {
+        Ok(outcome) => outcome,
+        Err(message) => {
+            return view! {
+                <p class="mb-10 border-l border-red-400/60 pl-4 text-sm text-red-200">
+                    "Resync failed. "
+                    <span class="text-red-200/70">{message}</span>
+                </p>
+            }
+            .into_any();
+        }
+    };
+    let clean = outcome.role_failures.is_empty()
+        && outcome.discord_issues.is_empty()
+        && outcome.reconcile_error.is_none();
+    let tone = if clean {
+        "border-accent-400/60 text-accent-100"
+    } else {
+        "border-amber-400/60 text-amber-100"
+    };
+    let issues = outcome
+        .role_failures
+        .iter()
+        .map(|issue| {
+            format!(
+                "{} ({}): Auth0 role: {}",
+                issue.name,
+                status_label(issue.status),
+                issue.error
+            )
+        })
+        .chain(outcome.discord_issues.iter().map(|issue| {
+            format!(
+                "{} ({}): Discord: {}",
+                issue.name,
+                status_label(issue.status),
+                issue.error
+            )
+        }))
+        .chain(
+            outcome
+                .reconcile_error
+                .iter()
+                .map(|e| format!("Discord reconcile: {e}")),
+        )
+        .collect::<Vec<_>>();
+    view! {
+        <div class=cn!("mb-10 border-l pl-4 text-sm leading-relaxed", tone)>
+            <p class="mb-1 font-mono text-[11px] tracking-[0.2em] uppercase">
+                {format!("Resynced {} applications", outcome.checked)}
+            </p>
+            {if clean {
+                view! { <p class="font-light opacity-80">"Auth0 and Discord match every application."</p> }
+                    .into_any()
+            } else {
+                view! {
+                    <ul class="font-light opacity-80">
+                        {issues.into_iter().map(|line| view! { <li>{line}</li> }).collect_view()}
+                    </ul>
+                }
+                    .into_any()
+            }}
+        </div>
+    }
+    .into_any()
+}
+
 #[component]
 fn Queue() -> impl IntoView {
     let auth = use_auth();
@@ -157,6 +227,8 @@ fn Queue() -> impl IntoView {
     let loading = RwSignal::new(false);
     let filter = RwSignal::new("requested".to_string());
     let expanded = RwSignal::new(None::<String>);
+    let resyncing = RwSignal::new(false);
+    let resync_result = RwSignal::new(None::<Result<api::ResyncOutcome, String>>);
 
     let refresh = move || {
         loading.set(true);
@@ -173,6 +245,22 @@ fn Queue() -> impl IntoView {
                 Err(err) => error.set(Some(err)),
             }
             loading.set(false);
+        });
+    };
+
+    // Puts every Auth0 and Discord role back in line with the application
+    // statuses, without waiting for the 10-minute cron.
+    let resync = move |_| {
+        resyncing.set(true);
+        resync_result.set(None);
+        spawn_local(async move {
+            let Some(token) = auth.token().await else {
+                resyncing.set(false);
+                return;
+            };
+            resync_result.set(Some(api::resync_beta_roles(&token).await));
+            resyncing.set(false);
+            refresh();
         });
     };
 
@@ -241,17 +329,31 @@ fn Queue() -> impl IntoView {
                                 "Staff"
                             </p>
                         </div>
-                        <button
-                            type="button"
-                            disabled=move || loading.get()
-                            on:click=move |_| refresh()
-                            class="inline-flex items-center gap-2 self-start text-sm text-white/55 transition-colors hover:text-white disabled:opacity-40 md:self-end"
-                        >
-                            <Icon icon=icons::REFRESH_CW class="h-4 w-4" />
-                            "Refresh"
-                        </button>
+                        <div class="flex items-center gap-6 self-start md:self-end">
+                            <button
+                                type="button"
+                                disabled=move || resyncing.get()
+                                on:click=resync
+                                title="Re-apply every tester's Auth0 and Discord role from their application status"
+                                class="inline-flex items-center gap-2 text-sm text-white/55 transition-colors hover:text-white disabled:opacity-40"
+                            >
+                                <Icon icon=icons::USERS class="h-4 w-4" />
+                                {move || if resyncing.get() { "Resyncing…" } else { "Resync roles" }}
+                            </button>
+                            <button
+                                type="button"
+                                disabled=move || loading.get()
+                                on:click=move |_| refresh()
+                                class="inline-flex items-center gap-2 text-sm text-white/55 transition-colors hover:text-white disabled:opacity-40"
+                            >
+                                <Icon icon=icons::REFRESH_CW class="h-4 w-4" />
+                                "Refresh"
+                            </button>
+                        </div>
                     </div>
                 </header>
+
+                {move || resync_result.get().map(|result| view! { <ResyncNotice result=result /> })}
 
                 {move || {
                     error
@@ -412,6 +514,17 @@ fn ApplicationCard(
                     } else {
                         String::new()
                     };
+                    // A worker with no Auth0 role mapped for the programme
+                    // reports success with no role: the record says approved
+                    // but nothing entitles the tester. Never let that pass
+                    // silently.
+                    if next == BetaStatus::Approved && result.role.is_none() {
+                        outcome.set(Some(format!(
+                            "Approved, but the worker has no Auth0 role mapped for \"{}\" (BETA_PROGRAM_MAP), so no role was granted.{discord_note}",
+                            api::BETA_PROGRAM
+                        )));
+                        return;
+                    }
                     if result.role_synced {
                         if discord_note.is_empty() {
                             on_changed.run(());

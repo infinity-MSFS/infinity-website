@@ -1573,6 +1573,14 @@ fn Approved(state: BetaState, go: Callback<String>) -> impl IntoView {
     // Read twice: once to decide whether the section renders, once to fill it.
     let documents = StoredValue::new(state.documents.clone());
 
+    // Permissions are baked into the access token when it is issued, so a
+    // token from before the approval still lacks the beta role. Fetch a fresh
+    // one once, rather than asking the tester to sign out and back in.
+    let auth = use_auth();
+    spawn_local(async move {
+        auth.refresh_entitlements(true).await;
+    });
+
     view! {
         <section class="mb-20">
             <SectionLabel num="01" label="Your application" />
@@ -1586,7 +1594,7 @@ fn Approved(state: BetaState, go: Callback<String>) -> impl IntoView {
             </p>
 
             <p class="mt-6 max-w-xl border-l border-accent-400/40 pl-5 text-sm leading-relaxed font-light text-white/65">
-                "The build shows up in the Infinity Manager under the beta channel. If it is not there yet, sign out and back in once — your entitlement is baked into the token."
+                "The build shows up in the Infinity Manager under the beta channel. If the Manager doesn't show it yet, sign out of the Manager and back in once."
             </p>
 
             <Notice

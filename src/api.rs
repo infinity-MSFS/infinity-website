@@ -962,6 +962,45 @@ pub async fn decide_beta_application(
     .map_err(|(_, message)| message)
 }
 
+/// One account the forced resync couldn't put right.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResyncIssue {
+    pub name: String,
+    pub status: BetaStatus,
+    pub error: String,
+}
+
+/// What `POST /v1/admin/beta/:program/resync` did.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResyncOutcome {
+    /// Applications whose role was re-applied from their status.
+    pub checked: u32,
+    /// Auth0 role changes that failed.
+    #[serde(default)]
+    pub role_failures: Vec<ResyncIssue>,
+    /// Approved testers whose Discord role couldn't be set.
+    #[serde(default)]
+    pub discord_issues: Vec<ResyncIssue>,
+    /// Set when the Auth0/Discord reconcile pass itself failed.
+    #[serde(default)]
+    pub reconcile_error: Option<String>,
+}
+
+/// Re-apply every application's role from its status, then reconcile Discord.
+pub async fn resync_beta_roles(token: &str) -> Result<ResyncOutcome, String> {
+    post_json(
+        WORKER_URL,
+        &format!("/v1/admin/beta/{BETA_PROGRAM}/resync"),
+        token,
+        &serde_json::json!({}),
+        "Couldn't resync roles",
+    )
+    .await
+    .map_err(|(_, message)| message)
+}
+
 // --- Discord account linking -------------------------------------------------
 
 pub async fn discord_link(token: &str) -> Result<DiscordLink, String> {

@@ -33,6 +33,10 @@ extern "C" {
 pub struct User {
     pub sub: Option<String>,
     pub name: Option<String>,
+    /// Only present when the identity provider supplies it (social logins
+    /// usually do; database users usually don't).
+    pub given_name: Option<String>,
+    pub family_name: Option<String>,
     pub nickname: Option<String>,
     pub email: Option<String>,
     pub picture: Option<String>,

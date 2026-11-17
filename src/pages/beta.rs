@@ -7,8 +7,10 @@
 //!      a case for why we should pick them. The questionnaire is graded on the
 //!      worker: the answer key never reaches the browser, and the score rides
 //!      along with the application as advisory context rather than a gate.
-//!   2. Sign — once accepted, the NDA and test agreement appear here as cards
-//!      that link out to the e-signing page.
+//!      Questions come one per screen, each timed while it is the one shown.
+//!      The times go to reviewers and are never shown to the applicant.
+//!   2. Sign — once accepted, the beta agreement (NDA and testing terms in one
+//!      document) appears here as a card that links out to the e-signing page.
 //!
 //! Everything shown is driven by `api::beta_status`, so the stage the applicant
 //! sees is the stage the worker says they are in. The stepper is presentation.
@@ -20,13 +22,17 @@ use leptos::task::spawn_local;
 
 use crate::api::{
     self, BetaApplication, BetaContact, BetaDocumentState, BetaState, BetaStatus, OpenAnswer,
-    QuizAnswer, QuizPaper, QuizScore,
+    PostalAddress, QuizAnswer, QuizPaper, QuizScore,
 };
-use crate::auth::use_auth;
+use crate::auth::{User, use_auth};
 use crate::components::{EYEBROW, HoverRule, SectionLabel};
 use crate::nav;
 
 const MIN_WHY_YOU: usize = 40;
+
+/// The beta agreement's eligibility clause (Article 5, Section V) requires
+/// testers to be at least this old.
+const MIN_AGE: i32 = 18;
 
 const STEPS: [&str; 4] = ["Systems check", "In your words", "Your details", "Review"];
 
@@ -53,6 +59,199 @@ fn local_timezone() -> String {
         .unwrap_or_default()
 }
 
+/// Whole years from an ISO `YYYY-MM-DD` date to today — negative for a date
+/// still to come — or `None` if it isn't a full date.
+pub(super) fn age_on(iso: &str) -> Option<i32> {
+    let mut parts = iso.trim().splitn(3, '-');
+    let year: i32 = parts.next()?.parse().ok()?;
+    let month: u32 = parts.next()?.parse().ok()?;
+    let day: u32 = parts.next()?.parse().ok()?;
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    let today = js_sys::Date::new_0();
+    let mut age = today.get_full_year() as i32 - year;
+    if (today.get_month() + 1, today.get_date()) < (month, day) {
+        age -= 1;
+    }
+    Some(age)
+}
+
+/// First and last name from the Auth0 profile. Social logins usually carry
+/// both. Failing that, only a plain two-word name is split: anything longer
+/// can't be split reliably, and a database user's name is often their email.
+fn profile_names(user: &User) -> (Option<String>, Option<String>) {
+    if user.given_name.is_some() || user.family_name.is_some() {
+        return (user.given_name.clone(), user.family_name.clone());
+    }
+    let name = user.name.as_deref().unwrap_or_default();
+    match name.split_whitespace().collect::<Vec<_>>().as_slice() {
+        [first, last] if !name.contains('@') => {
+            (Some((*first).to_string()), Some((*last).to_string()))
+        }
+        _ => (None, None),
+    }
+}
+
+/// Everything the details step collects. Signals are `Copy`, so the whole set
+/// travels to each step that edits or shows it.
+#[derive(Clone, Copy)]
+struct Details {
+    first_name: RwSignal<String>,
+    last_name: RwSignal<String>,
+    date_of_birth: RwSignal<String>,
+    faa_id: RwSignal<String>,
+    email: RwSignal<String>,
+    discord: RwSignal<String>,
+    timezone: RwSignal<String>,
+    line1: RwSignal<String>,
+    line2: RwSignal<String>,
+    city: RwSignal<String>,
+    region: RwSignal<String>,
+    postal_code: RwSignal<String>,
+    country: RwSignal<String>,
+    why_you: RwSignal<String>,
+}
+
+impl Details {
+    fn new() -> Self {
+        let empty = || RwSignal::new(String::new());
+        Self {
+            first_name: empty(),
+            last_name: empty(),
+            date_of_birth: empty(),
+            faa_id: empty(),
+            email: empty(),
+            discord: empty(),
+            timezone: RwSignal::new(local_timezone()),
+            line1: empty(),
+            line2: empty(),
+            city: empty(),
+            region: empty(),
+            postal_code: empty(),
+            country: empty(),
+            why_you: empty(),
+        }
+    }
+
+    fn full_name(&self) -> String {
+        format!(
+            "{} {}",
+            self.first_name.get().trim(),
+            self.last_name.get().trim()
+        )
+        .trim()
+        .to_string()
+    }
+
+    /// The address as it would be written on an envelope, one line per row.
+    fn address_block(&self) -> String {
+        let value = |field: RwSignal<String>| field.get().trim().to_string();
+        let mut locality = value(self.city);
+        let region = value(self.region);
+        if !region.is_empty() {
+            locality = if locality.is_empty() {
+                region
+            } else {
+                format!("{locality}, {region}")
+            };
+        }
+        let postal_code = value(self.postal_code);
+        if !postal_code.is_empty() {
+            locality = format!("{locality} {postal_code}").trim().to_string();
+        }
+        [value(self.line1), value(self.line2), locality, value(self.country)]
+            .into_iter()
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// The first thing stopping the details going in, in the order the fields
+    /// appear. Mirrors the worker's rules, which it re-checks on submit, so
+    /// this is only here to fail early rather than after a round trip.
+    fn problem(&self) -> Option<String> {
+        let blank = |field: RwSignal<String>| field.get().trim().is_empty();
+        if blank(self.first_name) {
+            return Some("Enter your first name.".into());
+        }
+        if blank(self.last_name) {
+            return Some("Enter your last name.".into());
+        }
+        let born = self.date_of_birth.get();
+        if born.trim().is_empty() {
+            return Some("Enter your date of birth.".into());
+        }
+        match age_on(&born) {
+            None => return Some("Enter your date of birth as a full date.".into()),
+            Some(age) if !(0..=120).contains(&age) => {
+                return Some("Check your date of birth.".into());
+            }
+            Some(age) if age < MIN_AGE => {
+                return Some(format!(
+                    "You need to be {MIN_AGE} or older to join the beta — the beta agreement requires it."
+                ));
+            }
+            Some(_) => {}
+        }
+        let address = self.email.get();
+        if address.trim().is_empty() || !address.contains('@') {
+            return Some("Enter a valid email address.".into());
+        }
+        if blank(self.discord) {
+            return Some("Enter your Discord username — that's where we coordinate.".into());
+        }
+        if blank(self.timezone) {
+            return Some("Enter your timezone.".into());
+        }
+        if blank(self.line1) {
+            return Some("Enter your street address.".into());
+        }
+        if blank(self.city) {
+            return Some("Enter your city or town.".into());
+        }
+        if blank(self.postal_code) {
+            return Some("Enter your postal or ZIP code.".into());
+        }
+        if blank(self.country) {
+            return Some("Enter your country.".into());
+        }
+        if self.why_you.get().trim().chars().count() < MIN_WHY_YOU {
+            return Some(format!(
+                "Tell us why we should pick you — at least {MIN_WHY_YOU} characters."
+            ));
+        }
+        None
+    }
+
+    /// The contact block as submitted. Untracked: it is read once, on submit.
+    fn contact(&self) -> BetaContact {
+        let value = |field: RwSignal<String>| field.get_untracked().trim().to_string();
+        let optional = |field: RwSignal<String>| Some(value(field)).filter(|v| !v.is_empty());
+        let first_name = value(self.first_name);
+        let last_name = value(self.last_name);
+        BetaContact {
+            display_name: format!("{first_name} {last_name}"),
+            first_name,
+            last_name,
+            email: value(self.email),
+            discord: value(self.discord),
+            timezone: value(self.timezone),
+            date_of_birth: optional(self.date_of_birth),
+            address: Some(PostalAddress {
+                line1: value(self.line1),
+                line2: optional(self.line2),
+                city: value(self.city),
+                region: optional(self.region),
+                postal_code: value(self.postal_code),
+                country: value(self.country),
+            }),
+            faa_id: optional(self.faa_id),
+            country: None,
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 enum Submit {
     Idle,
@@ -72,14 +271,17 @@ pub fn BetaSignup() -> impl IntoView {
 
     let step = RwSignal::new(0usize);
     let answers = RwSignal::new(BTreeMap::<String, String>::new());
+    // Which systems-check question is on screen. Kept here rather than in the
+    // step, so coming back from the next step lands where they left off.
+    let quiz_index = RwSignal::new(0usize);
+    // Milliseconds each question has been on screen, keyed by question id,
+    // and the one whose clock is running with when it started.
+    let quiz_times = RwSignal::new(BTreeMap::<String, f64>::new());
+    let quiz_clock = StoredValue::new(None::<(String, f64)>);
     let open_answers = RwSignal::new(BTreeMap::<String, String>::new());
     let submit_state = RwSignal::new(Submit::Idle);
 
-    let display_name = RwSignal::new(String::new());
-    let email = RwSignal::new(String::new());
-    let discord = RwSignal::new(String::new());
-    let timezone = RwSignal::new(local_timezone());
-    let why_you = RwSignal::new(String::new());
+    let details = Details::new();
 
     // Prefill from the Auth0 profile, but only where the applicant hasn't
     // already typed something — this effect re-runs when the profile resolves.
@@ -87,16 +289,17 @@ pub fn BetaSignup() -> impl IntoView {
         let Some(user) = auth.user.get() else {
             return;
         };
-        if display_name.get_untracked().is_empty()
-            && let Some(name) = user.name.clone()
-        {
-            display_name.set(name);
-        }
-        if email.get_untracked().is_empty()
-            && let Some(address) = user.email.clone()
-        {
-            email.set(address);
-        }
+        let fill = |field: RwSignal<String>, value: Option<String>| {
+            if field.get_untracked().is_empty()
+                && let Some(value) = value
+            {
+                field.set(value);
+            }
+        };
+        let (first, last) = profile_names(&user);
+        fill(details.first_name, first);
+        fill(details.last_name, last);
+        fill(details.email, user.email.clone());
     });
 
     let refresh = move || {
@@ -165,6 +368,25 @@ pub fn BetaSignup() -> impl IntoView {
         total_questions.get() > 0 && answered.get() == total_questions.get()
     });
 
+    // The per-question clock. Whenever the question on screen changes — Next,
+    // Previous, or leaving the step altogether — the outgoing question banks
+    // its time and the incoming one starts. Nothing here is ever rendered.
+    let on_screen = Memo::new(move |_| {
+        if step.get() != 0 {
+            return None;
+        }
+        let index = quiz_index.get();
+        questions.with(|qs| qs.get(index).map(|q| q.id.clone()))
+    });
+    Effect::new(move |_| {
+        let current = on_screen.get();
+        let now = js_sys::Date::now();
+        if let Some((id, since)) = quiz_clock.get_value() {
+            quiz_times.update(|times| *times.entry(id).or_default() += now - since);
+        }
+        quiz_clock.set_value(current.map(|id| (id, now)));
+    });
+
     // Mirrors the worker's rule. It re-checks on submit, so this is only here
     // to fail early rather than after a round trip.
     let open_problem = move || -> Option<String> {
@@ -193,29 +415,7 @@ pub fn BetaSignup() -> impl IntoView {
 
     let sending = Signal::derive(move || submit_state.get() == Submit::Sending);
 
-    let details_problem = move || -> Option<String> {
-        if display_name.get().trim().is_empty() {
-            return Some("Enter your name, or the name you go by.".into());
-        }
-        let address = email.get();
-        if address.trim().is_empty() || !address.contains('@') {
-            return Some("Enter a valid email address.".into());
-        }
-        if discord.get().trim().is_empty() {
-            return Some("Enter your Discord username — that's where we coordinate.".into());
-        }
-        if timezone.get().trim().is_empty() {
-            return Some("Enter your timezone.".into());
-        }
-        let why = why_you.get();
-        if why.trim().chars().count() < MIN_WHY_YOU {
-            return Some(format!(
-                "Tell us why we should pick you — at least {MIN_WHY_YOU} characters."
-            ));
-        }
-        None
-    };
-    let details_ready = Signal::derive(move || details_problem().is_none());
+    let details_ready = Signal::derive(move || details.problem().is_none());
 
     let submit = move |()| {
         submit_state.set(Submit::Sending);
@@ -227,20 +427,22 @@ pub fn BetaSignup() -> impl IntoView {
                 return;
             };
             let application = BetaApplication {
-                contact: BetaContact {
-                    display_name: display_name.get_untracked().trim().to_string(),
-                    email: email.get_untracked().trim().to_string(),
-                    discord: discord.get_untracked().trim().to_string(),
-                    timezone: timezone.get_untracked().trim().to_string(),
-                    country: None,
-                },
-                why_you: why_you.get_untracked().trim().to_string(),
+                contact: details.contact(),
+                why_you: details.why_you.get_untracked().trim().to_string(),
                 answers: answers
                     .get_untracked()
                     .into_iter()
-                    .map(|(question_id, choice_id)| QuizAnswer {
-                        question_id,
-                        choice_id,
+                    .map(|(question_id, choice_id)| {
+                        let time_ms = quiz_times
+                            .with_untracked(|times| times.get(&question_id).copied())
+                            .unwrap_or_default()
+                            .max(0.0)
+                            .round() as u64;
+                        QuizAnswer {
+                            question_id,
+                            choice_id,
+                            time_ms,
+                        }
                     })
                     .collect(),
                 open_answers: open_answers
@@ -338,6 +540,7 @@ pub fn BetaSignup() -> impl IntoView {
                                         <QuizStep
                                             questions=questions
                                             answers=answers
+                                            index=quiz_index
                                             answered=answered
                                             total=total_questions
                                             complete=quiz_complete
@@ -358,12 +561,8 @@ pub fn BetaSignup() -> impl IntoView {
 
                                     <Show when=move || step.get() == 2>
                                         <DetailsStep
-                                            display_name=display_name
-                                            email=email
-                                            discord=discord
-                                            timezone=timezone
-                                            why_you=why_you
-                                            problem=Signal::derive(details_problem)
+                                            details=details
+                                            problem=Signal::derive(move || details.problem())
                                             ready=details_ready
                                             on_back=Callback::new(move |()| step.set(1))
                                             on_next=Callback::new(move |()| step.set(3))
@@ -372,11 +571,7 @@ pub fn BetaSignup() -> impl IntoView {
 
                                     <Show when=move || step.get() == 3>
                                         <ReviewStep
-                                            display_name=display_name
-                                            email=email
-                                            discord=discord
-                                            timezone=timezone
-                                            why_you=why_you
+                                            details=details
                                             answered=answered
                                             total=total_questions
                                             failure=Signal::derive(move || match submit_state.get() {
@@ -549,20 +744,33 @@ fn Steps(#[prop(into)] current: Signal<usize>) -> impl IntoView {
     }
 }
 
+/// The multiple-choice half, one question per screen. That is what makes the
+/// per-question clock in [`BetaSignup`] mean anything: with every question on
+/// one page there is no telling which one someone was looking at.
 #[component]
 fn QuizStep(
     #[prop(into)] questions: Signal<Vec<api::QuizQuestion>>,
     answers: RwSignal<BTreeMap<String, String>>,
+    index: RwSignal<usize>,
     #[prop(into)] answered: Signal<usize>,
     #[prop(into)] total: Signal<usize>,
     #[prop(into)] complete: Signal<bool>,
     #[prop(into)] on_next: Callback<()>,
 ) -> impl IntoView {
+    let current = Signal::derive(move || questions.with(|qs| qs.get(index.get()).cloned()));
+    let current_answered = Signal::derive(move || {
+        current.with(|q| {
+            q.as_ref()
+                .is_some_and(|q| answers.with(|a| a.contains_key(&q.id)))
+        })
+    });
+    let last = Signal::derive(move || index.get() + 1 >= total.get());
+
     view! {
         <section>
             <SectionLabel num="01" label="Systems check" />
             <p class="mb-10 max-w-2xl text-sm leading-relaxed font-light text-white/65">
-                "Ten questions on how the DC-10 actually works. We're not looking for a perfect score — we're looking for someone who can tell a hydraulic problem from an electrical one when they file a report. Your score goes to us with the application; it doesn't block you from submitting."
+                "A short set of questions on how the DC-10 actually works, one at a time. We're not looking for a perfect score — we're looking for someone who can tell a hydraulic problem from an electrical one when they file a report. Your score goes to us with the application; it doesn't block you from submitting."
             </p>
 
             <div class="mb-10 flex items-center gap-4">
@@ -581,91 +789,110 @@ fn QuizStep(
                     ></div>
                 </div>
                 <div class="shrink-0 font-mono text-[11px] tabular-nums text-white/50">
-                    {move || format!("{:02} / {:02} answered", answered.get(), total.get())}
+                    {move || {
+                        let total = total.get();
+                        format!("Question {:02} / {total:02}", (index.get() + 1).min(total))
+                    }}
                 </div>
             </div>
 
-            <Show when=move || !questions.get().is_empty() fallback=|| view! { <Loading /> }>
-                <div class="border-b border-white/10">
-                    {move || {
-                        questions
-                            .get()
-                            .into_iter()
-                            .enumerate()
-                            .map(|(index, question)| {
-                                let id = question.id.clone();
-                                let selected_id = question.id.clone();
-                                let selected = Signal::derive(move || {
-                                    answers.with(|a| a.get(&selected_id).cloned().unwrap_or_default())
-                                });
-                                let on_change = Callback::new(move |choice: String| {
-                                    answers.update(|a| {
-                                        a.insert(id.clone(), choice);
-                                    });
-                                });
-                                view! {
-                                    <div class="grid gap-4 border-t border-white/10 py-6 md:grid-cols-[14rem_1fr] md:gap-8">
-                                        <div class="font-mono text-[11px] tracking-[0.2em] uppercase">
-                                            // The number lights up once the question is answered.
-                                            <span class=move || {
-                                                if selected.get().is_empty() {
-                                                    "text-white/30"
-                                                } else {
-                                                    "text-accent-400/80"
-                                                }
-                                            }>{format!("{:02}", index + 1)}</span>
-                                            <span class="ml-3 text-white/45">
-                                                {question.topic.clone()}
-                                            </span>
-                                        </div>
-                                        <div>
-                                            <p class="mb-4 text-base font-medium text-white">
-                                                {question.prompt.clone()}
-                                            </p>
-                                            <div class="space-y-1">
-                                                {question
-                                                    .choices
-                                                    .iter()
-                                                    .map(|choice| {
-                                                        view! {
-                                                            <Radio
-                                                                name=question.id.clone()
-                                                                value=choice.id.clone()
-                                                                selected=selected
-                                                                on_change=on_change
-                                                                label=choice.text.clone()
-                                                                class="w-full rounded-sm px-3 py-2 leading-6 font-light transition-colors hover:bg-white/[0.03]"
-                                                            />
-                                                        }
-                                                    })
-                                                    .collect_view()}
-                                            </div>
-                                        </div>
-                                    </div>
-                                }
-                            })
-                            .collect_view()
-                    }}
-                </div>
+            <Show when=move || current.with(Option::is_some) fallback=|| view! { <Loading /> }>
+                {move || {
+                    current
+                        .get()
+                        .map(|question| {
+                            view! {
+                                <QuizQuestionRow
+                                    question=question
+                                    number=index.get() + 1
+                                    answers=answers
+                                />
+                            }
+                        })
+                }}
             </Show>
 
-            <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-end">
+            <div class="mt-8 flex flex-col-reverse gap-6 sm:flex-row sm:items-center sm:justify-between">
+                <button
+                    type="button"
+                    disabled=move || index.get() == 0
+                    on:click=move |_| index.update(|i| *i = i.saturating_sub(1))
+                    class=BACK_LINK
+                >
+                    <Icon
+                        icon=icons::ARROW_LEFT
+                        class="h-4 w-4 transition-transform group-hover:-translate-x-0.5"
+                    />
+                    "Previous question"
+                </button>
                 <Button
                     variant=Variant::Solid
                     icon=icons::ARROW_RIGHT
-                    disabled=Signal::derive(move || !complete.get())
-                    on_click=on_next
-                >
-                    {move || {
-                        if complete.get() {
-                            "Continue".to_string()
+                    disabled=Signal::derive(move || {
+                        if last.get() { !complete.get() } else { !current_answered.get() }
+                    })
+                    on_click=Callback::new(move |()| {
+                        if last.get() {
+                            on_next.run(());
                         } else {
-                            format!("{} left to answer", total.get().saturating_sub(answered.get()))
+                            index.update(|i| *i += 1);
                         }
-                    }}
+                    })
+                >
+                    {move || if last.get() { "Continue" } else { "Next question" }}
                 </Button>
             </div>
         </section>
+    }
+}
+
+#[component]
+fn QuizQuestionRow(
+    question: api::QuizQuestion,
+    number: usize,
+    answers: RwSignal<BTreeMap<String, String>>,
+) -> impl IntoView {
+    let id = question.id.clone();
+    let selected_id = question.id.clone();
+    let selected =
+        Signal::derive(move || answers.with(|a| a.get(&selected_id).cloned().unwrap_or_default()));
+    let on_change = Callback::new(move |choice: String| {
+        answers.update(|a| {
+            a.insert(id.clone(), choice);
+        });
+    });
+
+    view! {
+        <div class="grid gap-4 border-y border-white/10 py-6 md:grid-cols-[14rem_1fr] md:gap-8">
+            <div class="font-mono text-[11px] tracking-[0.2em] uppercase">
+                // The number lights up once the question is answered.
+                <span class=move || {
+                    if selected.get().is_empty() { "text-white/30" } else { "text-accent-400/80" }
+                }>{format!("{number:02}")}</span>
+                <span class="ml-3 text-white/45">{question.topic.clone()}</span>
+            </div>
+            <div>
+                <p class="mb-4 text-base font-medium text-white">{question.prompt.clone()}</p>
+                <div class="space-y-1">
+                    {question
+                        .choices
+                        .iter()
+                        .map(|choice| {
+                            view! {
+                                <Radio
+                                    name=question.id.clone()
+                                    value=choice.id.clone()
+                                    selected=selected
+                                    on_change=on_change
+                                    label=choice.text.clone()
+                                    class="w-full rounded-sm px-3 py-2 leading-6 font-light transition-colors hover:bg-white/[0.03]"
+                                />
+                            }
+                        })
+                        .collect_view()}
+                </div>
+            </div>
+        </div>
     }
 }
 
@@ -802,36 +1029,65 @@ fn OpenStep(
 
 #[component]
 fn DetailsStep(
-    display_name: RwSignal<String>,
-    email: RwSignal<String>,
-    discord: RwSignal<String>,
-    timezone: RwSignal<String>,
-    why_you: RwSignal<String>,
+    details: Details,
     #[prop(into)] problem: Signal<Option<String>>,
     #[prop(into)] ready: Signal<bool>,
     #[prop(into)] on_back: Callback<()>,
     #[prop(into)] on_next: Callback<()>,
 ) -> impl IntoView {
+    // Every input here writes straight to one signal.
+    let set = |field: RwSignal<String>| Callback::new(move |value| field.set(value));
+
     view! {
         <section>
             <SectionLabel num="03" label="Your details" />
             <h2 class="mb-8 text-3xl font-extralight tracking-tight md:text-4xl">
-                "How we "
-                <span class="font-semibold">"reach you"</span>
+                "Who "
+                <span class="font-semibold">"you are"</span>
             </h2>
 
             <div class="grid gap-4 md:grid-cols-2">
-                <Field label="Name" required=true>
+                <Field label="First name" required=true>
                     <TextInput
-                        value=display_name
-                        on_input=Callback::new(move |v| display_name.set(v))
-                        placeholder="Your name"
+                        value=details.first_name
+                        on_input=set(details.first_name)
+                        placeholder="Jane"
                     />
                 </Field>
+                <Field label="Last name" required=true>
+                    <TextInput
+                        value=details.last_name
+                        on_input=set(details.last_name)
+                        placeholder="Public"
+                    />
+                </Field>
+                <Field
+                    label="Date of birth"
+                    required=true
+                    hint=format!("Testers need to be {MIN_AGE} or older.")
+                >
+                    <TextInput
+                        value=details.date_of_birth
+                        on_input=set(details.date_of_birth)
+                        input_type="date"
+                        // Light picker icon and calendar on the dark field.
+                        class="[color-scheme:dark]"
+                    />
+                </Field>
+                <Field
+                    label="FAA ID number (optional)"
+                    hint="Your FAA Tracking Number (FTN), if you hold a certificate."
+                >
+                    <TextInput value=details.faa_id on_input=set(details.faa_id) />
+                </Field>
+            </div>
+
+            <p class=cn!("mt-10 mb-4", EYEBROW)>"How we reach you"</p>
+            <div class="grid gap-4 md:grid-cols-3">
                 <Field label="Email" required=true>
                     <TextInput
-                        value=email
-                        on_input=Callback::new(move |v| email.set(v))
+                        value=details.email
+                        on_input=set(details.email)
                         placeholder="you@example.com"
                         input_type="email"
                     />
@@ -842,35 +1098,75 @@ fn DetailsStep(
                     hint="Where the beta actually happens: voice, screen share, hotfix pings."
                 >
                     <TextInput
-                        value=discord
-                        on_input=Callback::new(move |v| discord.set(v))
+                        value=details.discord
+                        on_input=set(details.discord)
                         placeholder="username"
                     />
                 </Field>
                 <Field label="Timezone" required=true hint="So we know when you're reachable.">
                     <TextInput
-                        value=timezone
-                        on_input=Callback::new(move |v| timezone.set(v))
+                        value=details.timezone
+                        on_input=set(details.timezone)
                         placeholder="America/Denver"
                     />
                 </Field>
             </div>
 
+            <p class=cn!("mt-10 mb-4", EYEBROW)>"Home address"</p>
+            <div class="grid gap-4">
+                <Field label="Street address" required=true>
+                    <TextInput
+                        value=details.line1
+                        on_input=set(details.line1)
+                        placeholder="1 Example Street"
+                    />
+                </Field>
+                <Field label="Apartment, suite, etc. (optional)">
+                    <TextInput
+                        value=details.line2
+                        on_input=set(details.line2)
+                        placeholder="Apartment 4"
+                    />
+                </Field>
+            </div>
+            <div class="mt-4 grid gap-4 md:grid-cols-3">
+                <Field label="City or town" required=true>
+                    <TextInput value=details.city on_input=set(details.city) placeholder="Denver" />
+                </Field>
+                <Field label="State / region" hint="If your country uses one.">
+                    <TextInput value=details.region on_input=set(details.region) placeholder="CO" />
+                </Field>
+                <Field label="Postal / ZIP code" required=true>
+                    <TextInput
+                        value=details.postal_code
+                        on_input=set(details.postal_code)
+                        placeholder="80202"
+                    />
+                </Field>
+            </div>
+            <Field label="Country" required=true class="mt-4">
+                <TextInput
+                    value=details.country
+                    on_input=set(details.country)
+                    placeholder="United States"
+                />
+            </Field>
+
             <Field
                 label="Why should we choose you?"
                 required=true
                 hint="Be specific. What you fly, how you report a bug, what you'd stress-test on a DC-10."
-                class="mt-6"
+                class="mt-10"
             >
                 <TextArea
-                    value=why_you
-                    on_input=Callback::new(move |v| why_you.set(v))
+                    value=details.why_you
+                    on_input=set(details.why_you)
                     rows=7
                     placeholder="I've flown the DC-10 in every sim that's had one and I know the systems well enough to tell you which one is misbehaving. I file reports with steps, expected vs actual, and a log…"
                 />
             </Field>
             <div class="mt-1 text-right font-mono text-[11px] tabular-nums text-white/35">
-                {move || format!("{} characters", why_you.get().trim().chars().count())}
+                {move || format!("{} characters", details.why_you.get().trim().chars().count())}
             </div>
 
             {move || {
@@ -911,11 +1207,7 @@ fn DetailsStep(
 
 #[component]
 fn ReviewStep(
-    display_name: RwSignal<String>,
-    email: RwSignal<String>,
-    discord: RwSignal<String>,
-    timezone: RwSignal<String>,
-    why_you: RwSignal<String>,
+    details: Details,
     #[prop(into)] answered: Signal<usize>,
     #[prop(into)] total: Signal<usize>,
     #[prop(into)] failure: Signal<Option<String>>,
@@ -932,10 +1224,24 @@ fn ReviewStep(
             </h2>
 
             <dl class="border-t border-white/10">
-                <ReviewRow label="Name" value=Signal::derive(move || display_name.get()) />
-                <ReviewRow label="Email" value=Signal::derive(move || email.get()) />
-                <ReviewRow label="Discord" value=Signal::derive(move || discord.get()) />
-                <ReviewRow label="Timezone" value=Signal::derive(move || timezone.get()) />
+                <ReviewRow label="Name" value=Signal::derive(move || details.full_name()) />
+                <ReviewRow label="Date of birth" value=details.date_of_birth />
+                <ReviewRow
+                    label="FAA ID"
+                    value=Signal::derive(move || {
+                        let id = details.faa_id.get().trim().to_string();
+                        if id.is_empty() { "Not provided".to_string() } else { id }
+                    })
+                />
+                <ReviewRow label="Email" value=details.email />
+                <ReviewRow label="Discord" value=details.discord />
+                <ReviewRow label="Timezone" value=details.timezone />
+                <div class=SPEC_ROW>
+                    <dt class=SPEC_LABEL>"Home address"</dt>
+                    <dd class="text-sm leading-6 font-light whitespace-pre-line text-white/80">
+                        {move || details.address_block()}
+                    </dd>
+                </div>
                 <ReviewRow
                     label="Questionnaire"
                     value=Signal::derive(move || {
@@ -945,7 +1251,7 @@ fn ReviewStep(
                 <div class=SPEC_ROW>
                     <dt class=SPEC_LABEL>"Why you"</dt>
                     <dd class="max-h-56 overflow-y-auto text-sm leading-6 font-light whitespace-pre-wrap text-white/75">
-                        {move || why_you.get()}
+                        {move || details.why_you.get()}
                     </dd>
                 </div>
             </dl>
@@ -1077,6 +1383,17 @@ fn NotSelected(note: Option<String>) -> impl IntoView {
 fn Paperwork(state: BetaState, go: Callback<String>) -> impl IntoView {
     let complete = state.documents_complete;
     let documents = state.documents.clone();
+    // The worker decides what there is to sign — today one combined agreement —
+    // so the copy follows the count rather than assuming one.
+    let single = documents.len() == 1;
+    let to_sign = if single {
+        "Your application was accepted. One agreement to sign.".to_string()
+    } else {
+        format!(
+            "Your application was accepted. {} documents to sign.",
+            documents.len()
+        )
+    };
 
     view! {
         <section class="mb-20">
@@ -1085,17 +1402,19 @@ fn Paperwork(state: BetaState, go: Callback<String>) -> impl IntoView {
                 {if complete { "Final check" } else { "Accepted" }}
             </p>
             <h2 class="max-w-3xl text-3xl font-extralight tracking-tight md:text-4xl">
-                {if complete {
-                    "Paperwork received — final check"
-                } else {
-                    "Your application was accepted. Two documents to sign."
-                }}
+                {if complete { "Paperwork received — final check".to_string() } else { to_sign }}
             </h2>
             <p class="mt-6 max-w-xl border-l border-accent-400/40 pl-5 text-sm leading-relaxed font-light text-white/65">
-                {if complete {
-                    "Both documents are signed and with us. We check them over and then release your build — nothing else for you to do."
-                } else {
-                    "Read and e-sign both below. Once they're in we do a final check and then you're a tester."
+                {match (complete, single) {
+                    (true, _) => {
+                        "Your paperwork is signed and with us. We check it over and then release your build — nothing else for you to do."
+                    }
+                    (false, true) => {
+                        "Read it through and e-sign it below. Once it's in we do a final check and then you're a tester."
+                    }
+                    (false, false) => {
+                        "Read and e-sign each one below. Once they're in we do a final check and then you're a tester."
+                    }
                 }}
             </p>
         </section>
@@ -1112,7 +1431,7 @@ fn Paperwork(state: BetaState, go: Callback<String>) -> impl IntoView {
             </div>
 
             <Note label="Before you sign">
-                "Read them properly — the NDA is what stops the aircraft leaking before release, and it binds you. If anything in either document doesn't work for you, tell us before signing rather than after."
+                "Read it properly — the NDA is what stops the aircraft leaking before release, and it binds you. If anything in it doesn't work for you, tell us before signing rather than after."
             </Note>
         </section>
     }
@@ -1150,7 +1469,7 @@ fn Approved(state: BetaState, go: Callback<String>) -> impl IntoView {
 
         <Show when=move || !documents.with_value(Vec::is_empty)>
             <section>
-                <SectionLabel num="02" label="Your signed documents" />
+                <SectionLabel num="02" label="Your signed paperwork" />
                 <div class="border-b border-white/10">
                     {documents
                         .get_value()

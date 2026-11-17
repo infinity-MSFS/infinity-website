@@ -12,12 +12,41 @@
 use infinity_ui::prelude::*;
 use leptos::task::spawn_local;
 
+use super::beta::age_on;
 use crate::api::{
     self, AdminApplication, AdminApplicationDetail, AdminSignature, BetaDecision, BetaStatus,
+    PostalAddress,
 };
 use crate::auth::use_auth;
 use crate::components::{EYEBROW, HoverRule, SectionLabel};
 use wasm_bindgen::JsCast;
+
+/// A postal address on one line, skipping the parts that weren't given.
+fn address_line(address: &PostalAddress) -> String {
+    [
+        Some(address.line1.clone()),
+        address.line2.clone(),
+        Some(address.city.clone()),
+        address.region.clone(),
+        Some(address.postal_code.clone()),
+        Some(address.country.clone()),
+    ]
+    .into_iter()
+    .flatten()
+    .filter(|part| !part.trim().is_empty())
+    .collect::<Vec<_>>()
+    .join(", ")
+}
+
+/// "42s", "3m 05s": the applicant's time on a question, or on all of them.
+fn duration(ms: u64) -> String {
+    let secs = (ms + 500) / 1000;
+    if secs < 60 {
+        format!("{secs}s")
+    } else {
+        format!("{}m {:02}s", secs / 60, secs % 60)
+    }
+}
 
 /// Render an ISO timestamp as something readable. The worker stores UTC, so
 /// say so rather than implying a local time we haven't converted to.
@@ -391,7 +420,7 @@ fn ApplicationCard(
     };
 
     // `None` exports everything they have signed; `Some(id)` exports one.
-    let export = move |document_id: Option<&'static str>| {
+    let export = move |document_id: Option<String>| {
         exporting.set(true);
         failure.set(None);
         spawn_local(async move {
@@ -400,7 +429,7 @@ fn ApplicationCard(
                 failure.set(Some("Your session expired. Sign in again.".into()));
                 return;
             };
-            match api::beta_export_pdf(&token, &sub.get_value(), document_id).await {
+            match api::beta_export_pdf(&token, &sub.get_value(), document_id.as_deref()).await {
                 Ok((bytes, filename)) => {
                     exporting.set(false);
                     if let Err(message) = download_bytes(&bytes, &filename) {
@@ -460,6 +489,18 @@ fn ApplicationCard(
     let email = StoredValue::new(application.contact.email.clone());
     let discord = StoredValue::new(application.contact.discord.clone());
     let timezone = StoredValue::new(application.contact.timezone.clone());
+    // Empty on applications from before the name was split into two fields.
+    let full_name = StoredValue::new(
+        format!(
+            "{} {}",
+            application.contact.first_name, application.contact.last_name
+        )
+        .trim()
+        .to_string(),
+    );
+    let born = StoredValue::new(application.contact.date_of_birth.clone());
+    let faa_id = StoredValue::new(application.contact.faa_id.clone());
+    let home = StoredValue::new(application.contact.address.as_ref().map(address_line));
     let reference = StoredValue::new(application.application_id.clone());
     let decided_at = StoredValue::new(application.decided_at.clone());
 
@@ -534,9 +575,26 @@ fn ApplicationCard(
             <Show when=move || open.get()>
                 <div class="space-y-12 border-t border-white/10 py-8 md:pl-6">
                     <dl class="grid gap-x-10 sm:grid-cols-2">
+                        {(!full_name.with_value(String::is_empty))
+                            .then(|| view! { <DetailRow label="Name" value=full_name.get_value() /> })}
+                        {born
+                            .get_value()
+                            .map(|date| {
+                                let value = match age_on(&date) {
+                                    Some(age) => format!("{date} (age {age})"),
+                                    None => date,
+                                };
+                                view! { <DetailRow label="Born" value=value /> }
+                            })}
+                        {faa_id
+                            .get_value()
+                            .map(|id| view! { <DetailRow label="FAA ID" value=id /> })}
                         <DetailRow label="Email" value=email.get_value() />
                         <DetailRow label="Discord" value=discord.get_value() />
                         <DetailRow label="Timezone" value=timezone.get_value() />
+                        {home
+                            .get_value()
+                            .map(|address| view! { <DetailRow label="Address" value=address /> })}
                         <DetailRow label="Reference" value=reference.get_value() />
                         <DetailRow label="Auth0 subject" value=sub.get_value() />
                         {decided_at
@@ -554,11 +612,18 @@ fn ApplicationCard(
                     </section>
 
                     <section>
-                        <SectionHeading text=format!(
-                            "Systems check — {}/{} correct",
-                            score.correct,
-                            score.total,
-                        ) />
+                        <SectionHeading text={
+                            // Applications from before the timer have no times;
+                            // say nothing rather than "0s".
+                            let timed: Vec<u64> = answers
+                                .with_value(|rows| rows.iter().filter_map(|a| a.time_ms).collect());
+                            let total = if timed.is_empty() {
+                                String::new()
+                            } else {
+                                format!(" · {}", duration(timed.iter().sum()))
+                            };
+                            format!("Systems check — {}/{} correct{total}", score.correct, score.total)
+                        } />
                         <div class="border-b border-white/10">
                             {answers
                                 .get_value()
@@ -638,24 +703,38 @@ fn ApplicationCard(
                                 >
                                     "Export all as PDF"
                                 </Button>
-                                <Button
-                                    variant=Variant::Ghost
-                                    size=Size::Sm
-                                    icon=icons::FILE_TEXT
-                                    disabled=exporting
-                                    on_click=Callback::new(move |()| export(Some("nda")))
-                                >
-                                    "NDA only"
-                                </Button>
-                                <Button
-                                    variant=Variant::Ghost
-                                    size=Size::Sm
-                                    icon=icons::FILE_TEXT
-                                    disabled=exporting
-                                    on_click=Callback::new(move |()| export(Some("beta-agreement")))
-                                >
-                                    "Contract only"
-                                </Button>
+                                // One button per document they actually signed, so
+                                // this follows whatever the worker issues rather than
+                                // a fixed pair. Pointless with only one.
+                                {move || {
+                                    let mut ids: Vec<String> = signatures
+                                        .with_value(|rows| {
+                                            rows.iter().map(|s| s.document_id.clone()).collect()
+                                        });
+                                    ids.sort();
+                                    ids.dedup();
+                                    (ids.len() > 1)
+                                        .then(|| {
+                                            ids.into_iter()
+                                                .map(|id| {
+                                                    let label = format!("{id} only");
+                                                    view! {
+                                                        <Button
+                                                            variant=Variant::Ghost
+                                                            size=Size::Sm
+                                                            icon=icons::FILE_TEXT
+                                                            disabled=exporting
+                                                            on_click=Callback::new(move |()| {
+                                                                export(Some(id.clone()))
+                                                            })
+                                                        >
+                                                            {label}
+                                                        </Button>
+                                                    }
+                                                })
+                                                .collect_view()
+                                        })
+                                }}
                             </div>
                             <p class="mt-3 max-w-2xl text-xs leading-5 font-light text-white/40">
                                 "The PDF carries the document text as signed, the signer's legal name and address, their signature, and the audit trail — timestamp, IP, and the hash of the exact wording they agreed to."
@@ -782,7 +861,7 @@ fn ApplicationCard(
                             </Show>
                         </div>
                         <p class="mt-4 max-w-2xl text-xs leading-5 font-light text-white/40">
-                            "Accepting only unlocks the NDA and test agreement on their beta page — it grants nothing. The Auth0 beta role is assigned on approval, once both documents are signed, and removed by any other decision."
+                            "Accepting only unlocks the beta agreement on their beta page — it grants nothing. The Auth0 beta role is assigned on approval, once everything is signed, and removed by any other decision."
                         </p>
 
                         <div class="mt-8 flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center">
@@ -877,6 +956,7 @@ fn AnswerRow(answer: api::AdminAnswer) -> impl IntoView {
         .chosen
         .clone()
         .unwrap_or_else(|| "Left blank".to_string());
+    let time = answer.time_ms.map(duration);
 
     view! {
         <div class="flex items-start gap-4 border-t border-white/10 py-4">
@@ -927,6 +1007,18 @@ fn AnswerRow(answer: api::AdminAnswer) -> impl IntoView {
                         })}
                 </Show>
             </div>
+            // How long it was on their screen. Never shown to the applicant.
+            {time
+                .map(|time| {
+                    view! {
+                        <span
+                            class="shrink-0 font-mono text-[11px] tabular-nums text-white/45"
+                            title="Time this question was on screen"
+                        >
+                            {time}
+                        </span>
+                    }
+                })}
         </div>
     }
 }
@@ -965,19 +1057,7 @@ fn SignatureRow(signature: AdminSignature) -> impl IntoView {
                 .signer
                 .clone()
                 .map(|signer| {
-                    let address = [
-                        Some(signer.address.line1),
-                        signer.address.line2,
-                        Some(signer.address.city),
-                        signer.address.region,
-                        Some(signer.address.postal_code),
-                        Some(signer.address.country),
-                    ]
-                        .into_iter()
-                        .flatten()
-                        .filter(|part| !part.trim().is_empty())
-                        .collect::<Vec<_>>()
-                        .join(", ");
+                    let address = address_line(&signer.address);
                     view! {
                         <div class="mt-3 border-l border-white/15 pl-4 text-xs leading-5 font-light text-white/55">
                             <div class="font-medium text-white/75">{signer.legal_name}</div>

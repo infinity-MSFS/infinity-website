@@ -436,10 +436,26 @@ pub struct BetaState {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BetaContact {
+    /// "First Last". Still sent alongside the split name: it is what the review
+    /// queue lists applicants by and what the signing page offers as the signer.
     pub display_name: String,
+    /// Empty on applications made before the name was split.
+    #[serde(default)]
+    pub first_name: String,
+    #[serde(default)]
+    pub last_name: String,
     pub email: String,
     pub discord: String,
     pub timezone: String,
+    /// ISO `YYYY-MM-DD`, as the date input produces it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_of_birth: Option<String>,
+    /// Home address. The agreement binds the person, so it needs somewhere
+    /// they can be served — the same reason the signing page asks for one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub address: Option<PostalAddress>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub faa_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub country: Option<String>,
 }
@@ -449,6 +465,9 @@ pub struct BetaContact {
 pub struct QuizAnswer {
     pub question_id: String,
     pub choice_id: String,
+    /// How long the question was on screen, summed over every visit.
+    /// Reviewers see it; the applicant never does.
+    pub time_ms: u64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -477,9 +496,45 @@ pub struct BetaReceipt {
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct DocumentSection {
+    /// Empty for a preamble that sits above the first heading.
+    #[serde(default)]
     pub heading: String,
     #[serde(default)]
     pub body: Vec<String>,
+    /// Numbered clauses, rendered after `body`. A document made only of
+    /// paragraphs leaves this empty.
+    #[serde(default)]
+    pub clauses: Vec<DocumentClause>,
+}
+
+/// One numbered clause of an agreement. The number travels as text rather than
+/// being derived from position, so it always matches the cross-references the
+/// agreement makes to itself ("Section II of this Article").
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct DocumentClause {
+    pub number: String,
+    /// Run-in heading with its punctuation, e.g. "Beta Materials.".
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub text: String,
+    /// Lettered sub-clauses.
+    #[serde(default)]
+    pub items: Vec<DocumentItem>,
+    /// Paragraphs after the lettered list that still belong to this clause.
+    #[serde(default)]
+    pub after: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct DocumentItem {
+    pub label: String,
+    /// Set on items whose text is a block under a heading, like a notice
+    /// address under "If to Company:".
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub text: String,
 }
 
 /// A document with its full text. Only served to accepted testers, and never
@@ -655,6 +710,10 @@ pub struct AdminAnswer {
     pub explanation: Option<String>,
     #[serde(default)]
     pub correct: bool,
+    /// Time the question was on screen. Absent on applications made before
+    /// the systems check was timed.
+    #[serde(default)]
+    pub time_ms: Option<u64>,
 }
 
 /// Signature evidence. The listing carries the metadata; `image_url` and the

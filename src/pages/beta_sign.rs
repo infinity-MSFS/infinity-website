@@ -1,8 +1,8 @@
 //! E-signing surface for the closed beta paperwork.
 //!
-//! Stage two of the application: an accepted tester reads the NDA or the test
-//! agreement here and signs it. Three things make this a signature rather than
-//! a checkbox, and all three are deliberate:
+//! Stage two of the application: an accepted tester reads the beta agreement
+//! here and signs it. Three things make this a signature rather than a
+//! checkbox, and all three are deliberate:
 //!
 //!   * The text is fetched from the worker on every visit — there is no local
 //!     copy that could drift from what the worker hashes into the receipt.
@@ -14,6 +14,11 @@
 //!
 //! The signature itself is drawn on a canvas or typed, and the worker stores
 //! the ink alongside the timestamp, document hash, IP and user agent.
+//!
+//! Bracketed blanks in the text (`[BETA TESTER LEGAL NAME]`, `[TESTER ADDRESS]`…)
+//! are filled on screen from the signer details below as they are typed. The
+//! worker hashes the text with its blanks in place; what fills them is the
+//! signer identity, which it snapshots onto the receipt.
 
 use infinity_ui::prelude::*;
 use leptos::task::spawn_local;
@@ -21,8 +26,8 @@ use leptos_router::hooks::use_params_map;
 use wasm_bindgen::JsCast;
 
 use crate::api::{
-    self, BetaDocument, BetaDocuments, PostalAddress, SignatureMethod, SignatureSubmission,
-    SignerIdentity,
+    self, BetaDocument, BetaDocuments, DocumentClause, PostalAddress, SignatureMethod,
+    SignatureSubmission, SignerIdentity,
 };
 use crate::auth::use_auth;
 use crate::components::{EYEBROW, SectionLabel};
@@ -31,6 +36,101 @@ use crate::nav;
 /// How close to the bottom counts as "read it". A few pixels of slack keeps
 /// fractional scroll heights and zoom levels from making the gate unreachable.
 const SCROLL_SLACK: i32 = 24;
+
+/// Body copy inside the document pane.
+const PARAGRAPH: &str = "text-sm leading-relaxed font-light text-white/75";
+
+/// Values for a document's bracketed blanks, keyed by the text inside the
+/// brackets. An empty value leaves the blank showing.
+type Blanks = Vec<(&'static str, String)>;
+
+/// "November 17, 2026" for an ISO timestamp, or for today when there isn't one.
+/// The agreement is governed by Iowa law, so its dates read US-style.
+fn long_date(iso: Option<&str>) -> String {
+    let date = match iso {
+        Some(iso) => js_sys::Date::new(&wasm_bindgen::JsValue::from_str(iso)),
+        None => js_sys::Date::new_0(),
+    };
+    if date.get_time().is_nan() {
+        return iso.unwrap_or_default().to_string();
+    }
+    let options = js_sys::Object::new();
+    for (key, value) in [("year", "numeric"), ("month", "long"), ("day", "numeric")] {
+        let _ = js_sys::Reflect::set(&options, &key.into(), &value.into());
+    }
+    date.to_locale_date_string("en-US", &options).into()
+}
+
+enum Segment {
+    Text(String),
+    Blank(String),
+}
+
+/// Split text around its `[UPPER CASE]` blanks. Brackets around anything else
+/// are ordinary text.
+fn segments(text: &str) -> Vec<Segment> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(open) = rest.find('[') {
+        let Some(len) = rest[open..].find(']') else {
+            break;
+        };
+        let inner = &rest[open + 1..open + len];
+        if inner.is_empty() || !inner.chars().all(|c| c.is_ascii_uppercase() || c == ' ') {
+            out.push(Segment::Text(rest[..=open].to_string()));
+            rest = &rest[open + 1..];
+            continue;
+        }
+        if open > 0 {
+            out.push(Segment::Text(rest[..open].to_string()));
+        }
+        out.push(Segment::Blank(inner.to_string()));
+        rest = &rest[open + len + 1..];
+    }
+    if !rest.is_empty() {
+        out.push(Segment::Text(rest.to_string()));
+    }
+    out
+}
+
+/// Document text with its blanks filled in. A blank with no value yet stays
+/// visible as a tag, so the signer can see what the form below will fill.
+fn filled(text: String, blanks: Signal<Blanks>) -> impl IntoView {
+    segments(&text)
+        .into_iter()
+        .map(|segment| match segment {
+            Segment::Text(text) => text.into_any(),
+            Segment::Blank(key) => {
+                let label = key.clone();
+                let value = Signal::derive(move || {
+                    blanks.with(|values| {
+                        values
+                            .iter()
+                            .find(|(name, _)| *name == key.as_str())
+                            .map(|(_, value)| value.clone())
+                            .filter(|value| !value.trim().is_empty())
+                            .unwrap_or_default()
+                    })
+                });
+                view! {
+                    <span class=move || {
+                        if value.with(String::is_empty) {
+                            "rounded-sm bg-amber-400/10 px-1 font-mono text-[11px] tracking-wider text-amber-200/90"
+                        } else {
+                            "font-normal text-white underline decoration-accent-400/50 underline-offset-4"
+                        }
+                    }>
+                        {move || {
+                            let current = value.get();
+                            if current.is_empty() { label.clone() } else { current }
+                        }}
+                    </span>
+                }
+                    .into_any()
+            }
+        })
+        .collect_view()
+}
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 enum Status {
@@ -71,6 +171,8 @@ pub fn BetaSignDocument() -> impl IntoView {
     let agreed = RwSignal::new(false);
     let has_ink = RwSignal::new(false);
     let read_to_end = RwSignal::new(false);
+    // The application reference, which the agreement calls the Beta Tester ID.
+    let tester_id = RwSignal::new(String::new());
 
     let canvas_ref = NodeRef::<leptos::html::Canvas>::new();
     let scroller = NodeRef::<leptos::html::Div>::new();
@@ -108,6 +210,12 @@ pub fn BetaSignDocument() -> impl IntoView {
                 }
                 Err(err) => load_error.set(Some(err)),
             }
+            // Best effort: without it the Beta Tester ID blank just stays showing.
+            if tester_id.get_untracked().is_empty()
+                && let Ok(state) = api::beta_status(&token).await
+            {
+                tester_id.set(state.application_id.unwrap_or_default());
+            }
         });
     };
 
@@ -124,6 +232,32 @@ pub fn BetaSignDocument() -> impl IntoView {
             b.as_ref()
                 .and_then(|b| b.documents.iter().find(|d| d.id == id).cloned())
         })
+    });
+
+    let signed_at =
+        Memo::new(move |_| document.with(|d| d.as_ref().and_then(|d| d.signed_at.clone())));
+    let blanks = Memo::new(move |_| -> Blanks {
+        let address = [
+            line1.get(),
+            line2.get(),
+            city.get(),
+            format!("{} {}", region.get().trim(), postal_code.get().trim()),
+            country.get(),
+        ]
+        .into_iter()
+        .map(|part| part.trim().to_string())
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(", ");
+        vec![
+            // Signed: the day it was signed. Unsigned: today, the day it would be.
+            ("EFFECTIVE DATE", long_date(signed_at.get().as_deref())),
+            ("BETA TESTER LEGAL NAME", legal_name.get().trim().to_string()),
+            ("TESTER ADDRESS", address.clone()),
+            ("TESTER NOTICE ADDRESS", address),
+            ("TESTER NOTICE EMAIL", email.get().trim().to_string()),
+            ("BETA TESTER ID", tester_id.get()),
+        ]
     });
 
     Effect::new(move |previous: Option<String>| {
@@ -347,7 +481,7 @@ pub fn BetaSignDocument() -> impl IntoView {
                                         on:scroll=on_scroll
                                         class="max-h-[60vh] overflow-y-auto py-8 pr-4"
                                     >
-                                        <DocumentBody doc=doc.clone() />
+                                        <DocumentBody doc=doc.clone() blanks=blanks />
                                     </div>
                                 </div>
                                 <div class=move || {
@@ -452,35 +586,104 @@ fn DocumentHeader(doc: BetaDocument) -> impl IntoView {
 }
 
 #[component]
-fn DocumentBody(doc: BetaDocument) -> impl IntoView {
+fn DocumentBody(doc: BetaDocument, #[prop(into)] blanks: Signal<Blanks>) -> impl IntoView {
     view! {
-        <div class="max-w-3xl space-y-8">
+        <div class="max-w-3xl space-y-10">
             {doc
                 .sections
                 .into_iter()
                 .map(|section| {
+                    let heading = section.heading;
                     view! {
-                        <section>
-                            <h2 class="mb-3 text-base font-medium tracking-tight text-white">
-                                {section.heading}
-                            </h2>
-                            <div class="space-y-3">
-                                {section
-                                    .body
-                                    .into_iter()
-                                    .map(|paragraph| {
-                                        view! {
-                                            <p class="text-sm leading-relaxed font-light text-white/75">
-                                                {paragraph}
-                                            </p>
-                                        }
-                                    })
-                                    .collect_view()}
-                            </div>
+                        <section class="space-y-5">
+                            {(!heading.is_empty())
+                                .then(|| {
+                                    view! {
+                                        <h2 class="text-base font-medium tracking-tight text-white">
+                                            {heading}
+                                        </h2>
+                                    }
+                                })}
+                            // Line breaks are meaningful here: a signature block
+                            // is one paragraph of lines.
+                            {section
+                                .body
+                                .into_iter()
+                                .map(|paragraph| {
+                                    view! {
+                                        <p class=cn!(PARAGRAPH, "whitespace-pre-line")>
+                                            {filled(paragraph, blanks)}
+                                        </p>
+                                    }
+                                })
+                                .collect_view()}
+                            {section
+                                .clauses
+                                .into_iter()
+                                .map(|clause| view! { <Clause clause=clause blanks=blanks /> })
+                                .collect_view()}
                         </section>
                     }
                 })
                 .collect_view()}
+        </div>
+    }
+}
+
+/// A numbered clause: the number in the margin, a run-in title, lettered items,
+/// then any paragraphs that close the clause.
+#[component]
+fn Clause(clause: DocumentClause, #[prop(into)] blanks: Signal<Blanks>) -> impl IntoView {
+    let DocumentClause { number, title, text, items, after } = clause;
+    view! {
+        <div class="grid grid-cols-[2.5rem_1fr] gap-x-3">
+            <span class="pt-0.5 font-mono text-[11px] text-accent-400/80">
+                {format!("{number}.")}
+            </span>
+            <div class="min-w-0 space-y-3">
+                <p class=PARAGRAPH>
+                    {(!title.is_empty())
+                        .then(|| {
+                            view! { <span class="font-medium text-white">{format!("{title} ")}</span> }
+                        })}
+                    {filled(text, blanks)}
+                </p>
+                {(!items.is_empty())
+                    .then(|| {
+                        view! {
+                            <ol class="space-y-2">
+                                {items
+                                    .into_iter()
+                                    .map(|item| {
+                                        let item_title = item.title;
+                                        view! {
+                                            <li class="grid grid-cols-[1.5rem_1fr] gap-x-2">
+                                                <span class="pt-0.5 font-mono text-[11px] text-white/40">
+                                                    {format!("{}.", item.label)}
+                                                </span>
+                                                <p class=cn!(PARAGRAPH, "whitespace-pre-line")>
+                                                    {(!item_title.is_empty())
+                                                        .then(|| {
+                                                            view! {
+                                                                <span class="block font-medium text-white">
+                                                                    {item_title}
+                                                                </span>
+                                                            }
+                                                        })}
+                                                    {filled(item.text, blanks)}
+                                                </p>
+                                            </li>
+                                        }
+                                    })
+                                    .collect_view()}
+                            </ol>
+                        }
+                    })}
+                {after
+                    .into_iter()
+                    .map(|paragraph| view! { <p class=PARAGRAPH>{filled(paragraph, blanks)}</p> })
+                    .collect_view()}
+            </div>
         </div>
     }
 }
@@ -531,7 +734,7 @@ fn SignatureBlock(
                         disabled=sending
                     />
                 </Field>
-                <Field label="Email" required=true hint="Where notices under these agreements go.">
+                <Field label="Email" required=true hint="Where notices under this agreement go.">
                     <TextInput
                         value=email
                         on_input=Callback::new(move |v| email.set(v))
@@ -839,9 +1042,9 @@ fn SignedReceipt(
             </h2>
             <p class="mb-3 max-w-md border-l border-accent-400/60 pl-4 text-sm leading-relaxed font-light text-white/65">
                 {if complete {
-                    "That's both documents done. Watch Discord — your build follows."
+                    "That's your paperwork done. Watch Discord — your build follows."
                 } else {
-                    "One down. Head back and sign the other one."
+                    "That one's done. Head back to the beta page for the rest."
                 }}
             </p>
             <p class="mb-8 font-mono text-[11px] break-all text-white/40">

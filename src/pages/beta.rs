@@ -14,6 +14,10 @@
 //!
 //! Everything shown is driven by `api::beta_status`, so the stage the applicant
 //! sees is the stage the worker says they are in. The stepper is presentation.
+//!
+//! Linking Discord comes before the questionnaire, not inside it: linking is a
+//! round trip through Discord that reloads the page, and doing it mid-form
+//! would throw away the answers.
 
 use std::collections::BTreeMap;
 
@@ -21,11 +25,13 @@ use infinity_ui::prelude::*;
 use leptos::task::spawn_local;
 
 use crate::api::{
-    self, BetaApplication, BetaContact, BetaDocumentState, BetaState, BetaStatus, OpenAnswer,
-    PostalAddress, QuizAnswer, QuizPaper, QuizScore,
+    self, BetaApplication, BetaContact, BetaDocumentState, BetaState, BetaStatus, DiscordLink,
+    OpenAnswer, PostalAddress, QuizAnswer, QuizPaper, QuizScore,
 };
 use crate::auth::{User, use_auth};
-use crate::components::{EYEBROW, HoverRule, SectionLabel};
+use crate::components::{
+    DiscordConnect, EYEBROW, HoverRule, LinkResultNotice, SectionLabel, take_link_result,
+};
 use crate::nav;
 
 const MIN_WHY_YOU: usize = 40;
@@ -102,7 +108,10 @@ struct Details {
     date_of_birth: RwSignal<String>,
     faa_id: RwSignal<String>,
     email: RwSignal<String>,
+    /// Typed username — only used when the worker can't link Discord.
     discord: RwSignal<String>,
+    /// Link state from the worker, kept in step with `BetaState::discord`.
+    discord_link: RwSignal<Option<DiscordLink>>,
     timezone: RwSignal<String>,
     line1: RwSignal<String>,
     line2: RwSignal<String>,
@@ -123,6 +132,7 @@ impl Details {
             faa_id: empty(),
             email: empty(),
             discord: empty(),
+            discord_link: RwSignal::new(None),
             timezone: RwSignal::new(local_timezone()),
             line1: empty(),
             line2: empty(),
@@ -131,6 +141,20 @@ impl Details {
             postal_code: empty(),
             country: empty(),
             why_you: empty(),
+        }
+    }
+
+    /// True when the worker links Discord, so the typed field isn't shown.
+    fn discord_linking(&self) -> bool {
+        self.discord_link.get().is_some_and(|link| link.available)
+    }
+
+    /// The Discord username to show and send: the linked one when linking is
+    /// on, otherwise whatever was typed.
+    fn discord_name(&self) -> String {
+        match self.discord_link.get() {
+            Some(link) if link.available => link.username.unwrap_or_default(),
+            _ => self.discord.get().trim().to_string(),
         }
     }
 
@@ -160,11 +184,16 @@ impl Details {
         if !postal_code.is_empty() {
             locality = format!("{locality} {postal_code}").trim().to_string();
         }
-        [value(self.line1), value(self.line2), locality, value(self.country)]
-            .into_iter()
-            .filter(|line| !line.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n")
+        [
+            value(self.line1),
+            value(self.line2),
+            locality,
+            value(self.country),
+        ]
+        .into_iter()
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
     }
 
     /// The first thing stopping the details going in, in the order the fields
@@ -198,7 +227,11 @@ impl Details {
         if address.trim().is_empty() || !address.contains('@') {
             return Some("Enter a valid email address.".into());
         }
-        if blank(self.discord) {
+        if self.discord_linking() {
+            if !self.discord_link.get().is_some_and(|link| link.linked) {
+                return Some("Connect your Discord account — that's where we coordinate.".into());
+            }
+        } else if blank(self.discord) {
             return Some("Enter your Discord username — that's where we coordinate.".into());
         }
         if blank(self.timezone) {
@@ -235,7 +268,8 @@ impl Details {
             first_name,
             last_name,
             email: value(self.email),
-            discord: value(self.discord),
+            discord: self.discord_name(),
+            discord_id: None,
             timezone: value(self.timezone),
             date_of_birth: optional(self.date_of_birth),
             address: Some(PostalAddress {
@@ -282,6 +316,14 @@ pub fn BetaSignup() -> impl IntoView {
     let submit_state = RwSignal::new(Submit::Idle);
 
     let details = Details::new();
+    // How a Discord link attempt went, if we just came back from one.
+    let link_result = take_link_result();
+
+    Effect::new(move |_| {
+        details
+            .discord_link
+            .set(state.with(|s| s.as_ref().and_then(|s| s.discord.clone())));
+    });
 
     // Prefill from the Auth0 profile, but only where the applicant hasn't
     // already typed something — this effect re-runs when the profile resolves.
@@ -495,6 +537,9 @@ pub fn BetaSignup() -> impl IntoView {
                         })
                 }}
 
+                {link_result
+                    .map(|result| view! { <LinkResultNotice result=result spacing="mb-10" /> })}
+
                 <Show
                     when=move || auth.is_authenticated.get()
                     fallback=move || view! { <SignedOut /> }
@@ -516,6 +561,17 @@ pub fn BetaSignup() -> impl IntoView {
                             }
                             BetaStatus::Approved => {
                                 view! { <Approved state=current.clone() go=go /> }.into_any()
+                            }
+                            BetaStatus::Revoked => {
+                                view! { <Revoked note=current.decision_note.clone() /> }
+                                    .into_any()
+                            }
+                            BetaStatus::None | BetaStatus::Withdrawn
+                                if current
+                                    .discord
+                                    .as_ref()
+                                    .is_some_and(|link| link.available && !link.linked) => {
+                                view! { <ConnectDiscord /> }.into_any()
                             }
                             BetaStatus::None | BetaStatus::Withdrawn => {
                                 view! {
@@ -562,6 +618,7 @@ pub fn BetaSignup() -> impl IntoView {
                                     <Show when=move || step.get() == 2>
                                         <DetailsStep
                                             details=details
+                                            on_discord_change=Callback::new(move |()| refresh())
                                             problem=Signal::derive(move || details.problem())
                                             ready=details_ready
                                             on_back=Callback::new(move |()| step.set(1))
@@ -1030,6 +1087,9 @@ fn OpenStep(
 #[component]
 fn DetailsStep(
     details: Details,
+    /// Runs after Discord is disconnected, so the page can refetch its status.
+    #[prop(into)]
+    on_discord_change: Callback<()>,
     #[prop(into)] problem: Signal<Option<String>>,
     #[prop(into)] ready: Signal<bool>,
     #[prop(into)] on_back: Callback<()>,
@@ -1089,17 +1149,39 @@ fn DetailsStep(
                         input_type="email"
                     />
                 </Field>
-                <Field
-                    label="Discord username"
-                    required=true
-                    hint="Where the beta actually happens: voice, screen share, hotfix pings."
-                >
-                    <TextInput
-                        value=details.discord
-                        on_input=set(details.discord)
-                        placeholder="username"
-                    />
-                </Field>
+                {move || {
+                    if details.discord_linking() {
+                        view! {
+                            <Field
+                                label="Discord"
+                                required=true
+                                hint="Where the beta actually happens: voice, screen share, hotfix pings."
+                            >
+                                <DiscordConnect
+                                    link=details.discord_link
+                                    return_to=nav::BETA
+                                    on_change=on_discord_change
+                                />
+                            </Field>
+                        }
+                            .into_any()
+                    } else {
+                        view! {
+                            <Field
+                                label="Discord username"
+                                required=true
+                                hint="Where the beta actually happens: voice, screen share, hotfix pings."
+                            >
+                                <TextInput
+                                    value=details.discord
+                                    on_input=set(details.discord)
+                                    placeholder="username"
+                                />
+                            </Field>
+                        }
+                            .into_any()
+                    }
+                }}
                 <Field label="Timezone" required=true hint="So we know when you're reachable.">
                     <TextInput
                         value=details.timezone
@@ -1235,7 +1317,7 @@ fn ReviewStep(
                     })
                 />
                 <ReviewRow label="Email" value=details.email />
-                <ReviewRow label="Discord" value=details.discord />
+                <ReviewRow label="Discord" value=Signal::derive(move || details.discord_name()) />
                 <ReviewRow label="Timezone" value=details.timezone />
                 <div class=SPEC_ROW>
                     <dt class=SPEC_LABEL>"Home address"</dt>
@@ -1258,7 +1340,7 @@ fn ReviewStep(
             </dl>
 
             <Note label="What happens next">
-                "We grade the questionnaire and read every application. If you're selected you'll hear from us on Discord or email, and this page will switch over to the NDA and beta agreement for you to sign."
+                "We grade the questionnaire and read every application. If you're selected you'll hear from us on Discord or email, and this page will switch over to the NDA and beta agreement for you to sign. Once you're approved, the beta role turns up in Discord on its own."
             </Note>
 
             {move || {
@@ -1352,6 +1434,53 @@ fn UnderReview(state: BetaState) -> impl IntoView {
 fn ScoreRow(score: QuizScore) -> impl IntoView {
     let value = format!("{}/{} ({}%)", score.correct, score.total, score.percent);
     view! { <ReviewRow label="Systems check" value=Signal::derive(move || value.clone()) /> }
+}
+
+/// Before the questionnaire: link Discord, which also joins the server.
+#[component]
+fn ConnectDiscord() -> impl IntoView {
+    view! {
+        <section>
+            <SectionLabel num="00" label="Before you start" />
+            <h2 class="mb-6 text-3xl font-extralight tracking-tight md:text-4xl">
+                "Connect "
+                <span class="font-semibold">"your Discord"</span>
+            </h2>
+            <p class="mb-8 max-w-xl border-l border-accent-400/40 pl-5 text-sm leading-relaxed font-light text-white/65">
+                "The beta runs on Discord: voice, screen share, hotfix pings. Connecting adds you to the Infinity server now, and if you're approved the beta role is granted there automatically."
+            </p>
+            <DiscordConnect link=Signal::derive(|| None) return_to=nav::BETA />
+            <p class="mt-6 max-w-xl text-xs leading-relaxed font-light text-white/40">
+                "We only read your Discord username and id. Do this first: it takes you to Discord and back, and anything typed into the form would be lost on the way."
+            </p>
+        </section>
+    }
+}
+
+/// Approved, then the beta role was taken away in Discord.
+#[component]
+fn Revoked(note: Option<String>) -> impl IntoView {
+    view! {
+        <section>
+            <SectionLabel num="01" label="Your application" />
+            <p class=cn!(STATUS, "text-white/50")>"Access removed"</p>
+            <h2 class="mb-6 text-3xl font-extralight tracking-tight md:text-4xl">
+                "Beta access "
+                <span class="font-semibold">"revoked"</span>
+            </h2>
+            <p class="max-w-xl border-l border-white/20 pl-5 text-sm leading-relaxed font-light text-white/65">
+                "Your beta role was removed, so builds are no longer available to this account. Your signed agreements stay on file. If you think this is a mistake, ask the team on Discord."
+            </p>
+            {note
+                .map(|note| {
+                    view! {
+                        <p class="mt-8 max-w-2xl border-t border-white/10 pt-5 text-sm leading-6 font-light whitespace-pre-wrap text-white/70">
+                            {note}
+                        </p>
+                    }
+                })}
+        </section>
+    }
 }
 
 #[component]

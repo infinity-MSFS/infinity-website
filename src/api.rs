@@ -337,6 +337,9 @@ pub enum BetaStatus {
     Approved,
     Rejected,
     Withdrawn,
+    /// Was approved, then the beta role was taken away in Discord. The
+    /// signatures are kept; staff can approve again.
+    Revoked,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
@@ -431,6 +434,25 @@ pub struct BetaState {
     pub documents: Vec<BetaDocumentState>,
     #[serde(default)]
     pub documents_complete: bool,
+    /// Absent from workers that predate Discord linking.
+    #[serde(default)]
+    pub discord: Option<DiscordLink>,
+}
+
+/// The Discord account linked to this website account.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordLink {
+    /// False when the worker has no Discord app configured: the beta form
+    /// then falls back to a typed username.
+    #[serde(default)]
+    pub available: bool,
+    #[serde(default)]
+    pub linked: bool,
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub username: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -445,7 +467,12 @@ pub struct BetaContact {
     #[serde(default)]
     pub last_name: String,
     pub email: String,
+    /// Username. When Discord is linked the worker overwrites this with the
+    /// linked account's, whatever the form sent.
     pub discord: String,
+    /// Linked Discord user id; set by the worker, never by the form.
+    #[serde(default, skip_serializing)]
+    pub discord_id: Option<String>,
     pub timezone: String,
     /// ISO `YYYY-MM-DD`, as the date input produces it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -832,6 +859,15 @@ pub struct DecisionOutcome {
     pub role_synced: bool,
     #[serde(default)]
     pub role_error: Option<String>,
+    /// Discord role id mirrored onto the tester. `None` when the programme
+    /// isn't mirrored to Discord.
+    #[serde(default)]
+    pub discord_role: Option<String>,
+    #[serde(default)]
+    pub discord_synced: bool,
+    /// Why Discord wasn't updated — not linked, not in the server, or a failure.
+    #[serde(default)]
+    pub discord_error: Option<String>,
 }
 
 pub async fn beta_applications(token: &str) -> Result<AdminApplications, String> {
@@ -924,6 +960,51 @@ pub async fn decide_beta_application(
     )
     .await
     .map_err(|(_, message)| message)
+}
+
+// --- Discord account linking -------------------------------------------------
+
+pub async fn discord_link(token: &str) -> Result<DiscordLink, String> {
+    get_json(WORKER_URL, "/v1/discord/link", Some(token)).await
+}
+
+/// Start linking. Returns the Discord authorize URL to navigate to; Discord
+/// sends the browser back to `return_to` with `?discord=linked|cancelled|taken|error`.
+pub async fn start_discord_link(token: &str, return_to: &str) -> Result<String, String> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Body<'a> {
+        return_to: &'a str,
+    }
+    #[derive(Deserialize)]
+    struct Started {
+        url: String,
+    }
+
+    post_json::<_, Started>(
+        WORKER_URL,
+        "/v1/discord/link",
+        token,
+        &Body { return_to },
+        "Couldn't start linking Discord",
+    )
+    .await
+    .map(|started| started.url)
+    .map_err(|(_, message)| message)
+}
+
+pub async fn unlink_discord(token: &str) -> Result<(), String> {
+    #[derive(Deserialize)]
+    struct Ignored {}
+
+    delete_json::<Ignored>(
+        WORKER_URL,
+        "/v1/discord/link",
+        token,
+        "Couldn't unlink Discord",
+    )
+    .await
+    .map(|_| ())
 }
 
 pub async fn change_password(token: &str, current: &str, next: &str) -> Result<(), String> {

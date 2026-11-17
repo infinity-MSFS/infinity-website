@@ -9,10 +9,9 @@ pub const DISCORD: IconData = IconData::new(
 );
 
 /// The legal entity. Never fall back to a product's `developer` field for this:
-/// the catalog carries "Aero Dynamics" and "Infinity Simulations", neither of
-/// which is the LLC, and a copyright notice naming the wrong entity is worse
-/// than none.
-pub const PUBLISHER: &str = "Aero Dynamics Development LLC";
+/// the catalog's developer names are brands, not the LLC, and a copyright
+/// notice naming the wrong entity is worse than none.
+pub const PUBLISHER: &str = "Infinity Simulations LLC";
 
 /// Bump each January. The EULA footer and the site footer both read this.
 pub const COPYRIGHT_YEAR: u16 = 2026;

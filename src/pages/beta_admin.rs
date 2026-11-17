@@ -102,6 +102,7 @@ fn status_label(status: BetaStatus) -> &'static str {
         BetaStatus::Approved => "Approved",
         BetaStatus::Rejected => "Rejected",
         BetaStatus::Withdrawn => "Withdrawn",
+        BetaStatus::Revoked => "Revoked",
     }
 }
 
@@ -109,7 +110,7 @@ fn status_color(status: BetaStatus) -> &'static str {
     match status {
         BetaStatus::Approved => "text-accent-300",
         BetaStatus::Accepted | BetaStatus::Requested => "text-amber-300",
-        BetaStatus::Rejected => "text-red-300",
+        BetaStatus::Rejected | BetaStatus::Revoked => "text-red-300",
         BetaStatus::None | BetaStatus::Withdrawn => "text-white/40",
     }
 }
@@ -198,6 +199,7 @@ fn Queue() -> impl IntoView {
                 "paperwork" => application.status == BetaStatus::Accepted,
                 "approved" => application.status == BetaStatus::Approved,
                 "rejected" => application.status == BetaStatus::Rejected,
+                "revoked" => application.status == BetaStatus::Revoked,
                 _ => true,
             })
             .collect::<Vec<_>>()
@@ -216,6 +218,7 @@ fn Queue() -> impl IntoView {
                 .with_badge(count(BetaStatus::Approved).to_string()),
             TabItem::new("rejected", "Rejected")
                 .with_badge(count(BetaStatus::Rejected).to_string()),
+            TabItem::new("revoked", "Revoked").with_badge(count(BetaStatus::Revoked).to_string()),
             TabItem::new("all", "All").with_badge(all.get().len().to_string()),
         ]
     });
@@ -395,8 +398,26 @@ fn ApplicationCard(
             match api::decide_beta_application(&token, &decision).await {
                 Ok(result) => {
                     busy.set(false);
+                    // The Discord role is a mirror too. Not being linked or
+                    // in the server isn't an error worth stopping on, but
+                    // staff should know the tester won't see the role yet.
+                    let discord_note = if result.discord_role.is_some() && !result.discord_synced {
+                        let why = result
+                            .discord_error
+                            .clone()
+                            .unwrap_or_else(|| "the Discord call didn't complete".to_string());
+                        format!(
+                            " Discord role not updated: {why}. The sync retries every 10 minutes for linked members."
+                        )
+                    } else {
+                        String::new()
+                    };
                     if result.role_synced {
-                        on_changed.run(());
+                        if discord_note.is_empty() {
+                            on_changed.run(());
+                        } else {
+                            outcome.set(Some(format!("Decision saved.{discord_note}")));
+                        }
                         return;
                     }
                     // The record is written before Auth0 is touched, so a
@@ -408,7 +429,7 @@ fn ApplicationCard(
                         .role_error
                         .unwrap_or_else(|| "the Auth0 call didn't complete".to_string());
                     outcome.set(Some(format!(
-                        "Decision saved, but the {role} role didn't sync: {why}. Repeat the same decision to retry it.",
+                        "Decision saved, but the {role} role didn't sync: {why}. Repeat the same decision to retry it.{discord_note}",
                     )));
                 }
                 Err(err) => {
@@ -487,7 +508,11 @@ fn ApplicationCard(
     let open_answers = StoredValue::new(application.open_answers.clone());
     let signatures = StoredValue::new(application.signatures.clone());
     let email = StoredValue::new(application.contact.email.clone());
-    let discord = StoredValue::new(application.contact.discord.clone());
+    // Linked accounts carry an id; older applications only have a typed name.
+    let discord = StoredValue::new(match &application.contact.discord_id {
+        Some(id) => format!("{} · linked ({id})", application.contact.discord),
+        None => format!("{} · not linked", application.contact.discord),
+    });
     let timezone = StoredValue::new(application.contact.timezone.clone());
     // Empty on applications from before the name was split into two fields.
     let full_name = StoredValue::new(

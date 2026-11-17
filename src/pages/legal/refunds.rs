@@ -94,7 +94,7 @@ pub fn RefundPolicy() -> impl IntoView {
                     <strong>
                         "Your statement will show a charge beginning " <code>"LEMSQZY*"</code>
                     </strong>
-                    " — not \"Aero Dynamics\" and not \"Infinity\". If you don't recognise a charge, look for that prefix before you contact your bank."
+                    " — not \"Infinity Simulations\" and not \"Infinity\". If you don't recognise a charge, look for that prefix before you contact your bank."
                 </P>
                 <P>
                     "When you ask us for a refund and we approve it, we instruct Lemon Squeezy to issue it. Lemon Squeezy also has refund discretion of its own, independent of this policy, and may issue a refund we would not have. This policy describes what we will do. It does not, and cannot, limit what Lemon Squeezy, your card issuer or your bank may do."

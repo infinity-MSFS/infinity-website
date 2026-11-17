@@ -4,7 +4,10 @@ use leptos::task::spawn_local;
 use super::legal::LINK;
 use crate::api::{self, AircraftProduct, MIN_PASSWORD_LENGTH, SupportTicket};
 use crate::auth::{User, use_auth};
-use crate::components::{DownloadButton, EYEBROW, HoverRule, SectionLabel};
+use crate::components::{
+    DiscordConnect, DownloadButton, EYEBROW, HoverRule, LinkResultNotice, SectionLabel,
+    take_link_result,
+};
 use crate::nav;
 use crate::state::{use_catalog, use_manager};
 
@@ -168,6 +171,7 @@ fn Dashboard() -> impl IntoView {
                 <section>
                     <SectionLabel num="04" label="Support" />
                     <div class="border-b border-white/10">
+                        <DiscordAccountRow />
                         <a
                             href=nav::DISCORD_URL
                             target="_blank"
@@ -210,6 +214,47 @@ fn Dashboard() -> impl IntoView {
 
             <SupportModal open=support_open />
         </AnimatedPage>
+    }
+}
+
+/// The linked Discord account. Hidden when the worker can't link Discord.
+#[component]
+fn DiscordAccountRow() -> impl IntoView {
+    let auth = use_auth();
+    let link = RwSignal::new(None::<api::DiscordLink>);
+    let result = take_link_result();
+
+    let load = move || {
+        spawn_local(async move {
+            let Some(token) = auth.token().await else {
+                return;
+            };
+            if let Ok(current) = api::discord_link(&token).await {
+                link.set(Some(current));
+            }
+        });
+    };
+    load();
+
+    view! {
+        <Show when=move || link.get().is_some_and(|l| l.available)>
+            <div class=ROW>
+                <h3 class="text-base font-medium">"Discord account"</h3>
+                <div class="flex flex-col gap-3">
+                    <p class="text-sm font-light text-white/55">
+                        "Link Discord to join the server and get your beta role automatically."
+                    </p>
+                    {result
+                        .clone()
+                        .map(|result| view! { <LinkResultNotice result=result /> })}
+                </div>
+                <DiscordConnect
+                    link=link
+                    return_to=nav::USER
+                    on_change=Callback::new(move |()| load())
+                />
+            </div>
+        </Show>
     }
 }
 

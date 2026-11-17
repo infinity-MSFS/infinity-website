@@ -5,7 +5,7 @@ use crate::nav;
 
 const HEADLINE: &str = "High-fidelity aircraft.";
 const HEADLINE_ACCENT: &str = "Effortless management.";
-const DESCRIPTION: &str = "Infinity is the distribution platform and aircraft manager from Aero Dynamics — shipping our premium add-ons alongside hand-picked freeware from the wider community. Engineered in Rust with a strict push for safe, reliable code across everything we build.";
+const DESCRIPTION: &str = "Infinity is the distribution platform and aircraft manager for Microsoft Flight Simulator — shipping our premium add-ons alongside hand-picked freeware from the wider community. Engineered in Rust with a strict push for safe, reliable code across everything we build.";
 
 const DESTINATIONS: &[(&str, &str, &str, &str)] = &[
     (
@@ -44,13 +44,8 @@ pub fn Home() -> impl IntoView {
             </div>
 
             <div class="relative z-10 mx-auto flex min-h-full max-w-6xl flex-col justify-between px-6 py-10 md:px-10 md:py-14">
-                <Reveal
-                    y=8.0
-                    duration=0.6
-                    class="flex items-center gap-4 font-mono text-[11px] tracking-[0.25em] text-white/50 uppercase"
-                >
-                    <span>"By Aero Dynamics"</span>
-                </Reveal>
+                // Holds the top slot of `justify-between` so the headline stays centred.
+                <div aria-hidden="true"></div>
 
                 <div class="my-14 max-w-3xl">
                     <Reveal

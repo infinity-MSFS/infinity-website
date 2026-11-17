@@ -157,11 +157,11 @@ pub fn BetaSignDocument() -> impl IntoView {
 
     let method = RwSignal::new("draw".to_string());
     let typed_name = RwSignal::new(String::new());
-    // The binding party. Prefilled from a previous signature where there is
-    // one, so the second document doesn't ask for the same address twice.
+    // The binding party. Prefilled from the worker's `signer`: the last
+    // signature's details or, before any signature, the name, email and home
+    // address from the application, so nobody types their address twice.
     let legal_name = RwSignal::new(String::new());
     let email = RwSignal::new(String::new());
-    let phone = RwSignal::new(String::new());
     let line1 = RwSignal::new(String::new());
     let line2 = RwSignal::new(String::new());
     let city = RwSignal::new(String::new());
@@ -195,7 +195,6 @@ pub fn BetaSignDocument() -> impl IntoView {
                         };
                         fill(legal_name, previous.legal_name);
                         fill(email, previous.email);
-                        fill(phone, previous.phone.unwrap_or_default());
                         fill(line1, previous.address.line1);
                         fill(line2, previous.address.line2.unwrap_or_default());
                         fill(city, previous.address.city);
@@ -372,7 +371,7 @@ pub fn BetaSignDocument() -> impl IntoView {
             let signer = SignerIdentity {
                 legal_name: legal_name.get_untracked().trim().to_string(),
                 email: email.get_untracked().trim().to_string(),
-                phone: optional(phone),
+                phone: None,
                 address: PostalAddress {
                     line1: line1.get_untracked().trim().to_string(),
                     line2: optional(line2),
@@ -527,7 +526,6 @@ pub fn BetaSignDocument() -> impl IntoView {
                                             typed_name=typed_name
                                             legal_name=legal_name
                                             email=email
-                                            phone=phone
                                             line1=line1
                                             line2=line2
                                             city=city
@@ -694,7 +692,6 @@ fn SignatureBlock(
     typed_name: RwSignal<String>,
     legal_name: RwSignal<String>,
     email: RwSignal<String>,
-    phone: RwSignal<String>,
     line1: RwSignal<String>,
     line2: RwSignal<String>,
     city: RwSignal<String>,
@@ -744,15 +741,6 @@ fn SignatureBlock(
                     />
                 </Field>
             </div>
-
-            <Field label="Phone (optional)" class="mt-4">
-                <TextInput
-                    value=phone
-                    on_input=Callback::new(move |v| phone.set(v))
-                    placeholder="+1 555 0100"
-                    disabled=sending
-                />
-            </Field>
 
             <p class=cn!("mt-10 mb-4", EYEBROW)>"Address"</p>
             <div class="grid gap-4">

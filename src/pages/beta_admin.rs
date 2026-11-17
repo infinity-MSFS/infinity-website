@@ -588,7 +588,7 @@ fn ApplicationCard(
                             })}
                         {faa_id
                             .get_value()
-                            .map(|id| view! { <DetailRow label="FAA ID" value=id /> })}
+                            .map(|id| view! { <DetailRow label="FAA Certificate Number" value=id /> })}
                         <DetailRow label="Email" value=email.get_value() />
                         <DetailRow label="Discord" value=discord.get_value() />
                         <DetailRow label="Timezone" value=timezone.get_value() />
@@ -952,10 +952,15 @@ fn DetailRow(#[prop(into)] label: String, #[prop(into)] value: String) -> impl I
 #[component]
 fn AnswerRow(answer: api::AdminAnswer) -> impl IntoView {
     let correct = answer.correct;
-    let chosen = answer
-        .chosen
-        .clone()
-        .unwrap_or_else(|| "Left blank".to_string());
+    // The worker looks questions up in the current paper, so one that has
+    // since been replaced comes back with no prompt and no choice text. Say
+    // that, rather than calling a real answer "Left blank".
+    let replaced = answer.prompt.is_none();
+    let chosen = match (answer.chosen.clone(), replaced) {
+        (Some(text), _) => text,
+        (None, true) => "not shown: this question has since been replaced".to_string(),
+        (None, false) => "Left blank".to_string(),
+    };
     let time = answer.time_ms.map(duration);
 
     view! {

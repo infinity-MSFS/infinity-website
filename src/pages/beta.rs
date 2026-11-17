@@ -770,7 +770,7 @@ fn QuizStep(
         <section>
             <SectionLabel num="01" label="Systems check" />
             <p class="mb-10 max-w-2xl text-sm leading-relaxed font-light text-white/65">
-                "A short set of questions on how the DC-10 actually works, one at a time. We're not looking for a perfect score — we're looking for someone who can tell a hydraulic problem from an electrical one when they file a report. Your score goes to us with the application; it doesn't block you from submitting."
+                "A quick, fun pre-quiz to start things off: a few questions on how the DC-10 works, one at a time. No pressure and no pass mark, so go with what you know and don't overthink it. Whatever you score, you can still apply."
             </p>
 
             <div class="mb-10 flex items-center gap-4">
@@ -1074,10 +1074,7 @@ fn DetailsStep(
                         class="[color-scheme:dark]"
                     />
                 </Field>
-                <Field
-                    label="FAA ID number (optional)"
-                    hint="Your FAA Tracking Number (FTN), if you hold a certificate."
-                >
+                <Field label="FAA Certificate Number (optional)">
                     <TextInput value=details.faa_id on_input=set(details.faa_id) />
                 </Field>
             </div>
@@ -1151,6 +1148,10 @@ fn DetailsStep(
                     placeholder="United States"
                 />
             </Field>
+
+            <Note label="Why we ask">
+                "As part of the beta NDA, we need your full legal name and mailing address. This is standard for the agreement, so we can properly identify the parties and send any formal notices (termination, etc.) if needed. It's kept confidential and used only for the beta program and the agreement. Email is still the normal way we'll communicate."
+            </Note>
 
             <Field
                 label="Why should we choose you?"
@@ -1227,7 +1228,7 @@ fn ReviewStep(
                 <ReviewRow label="Name" value=Signal::derive(move || details.full_name()) />
                 <ReviewRow label="Date of birth" value=details.date_of_birth />
                 <ReviewRow
-                    label="FAA ID"
+                    label="FAA Certificate Number"
                     value=Signal::derive(move || {
                         let id = details.faa_id.get().trim().to_string();
                         if id.is_empty() { "Not provided".to_string() } else { id }

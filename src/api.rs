@@ -454,6 +454,8 @@ pub struct BetaContact {
     /// they can be served — the same reason the signing page asks for one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub address: Option<PostalAddress>,
+    /// FAA certificate number, if they hold one. Shown as "FAA Certificate
+    /// Number"; `faaId` on the wire, as the worker stores it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub faa_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

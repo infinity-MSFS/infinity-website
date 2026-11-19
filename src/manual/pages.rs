@@ -20,7 +20,7 @@ const ROW: &str = "group relative border-t border-white/10 transition-colors hov
 fn group_label(num: &'static str, label: String) -> impl IntoView {
     view! {
         <div class=cn!("mb-8 flex items-center gap-4", EYEBROW)>
-            <span class="text-accent-400/80">{num}</span>
+            {(!num.is_empty()).then(|| view! { <span class="text-accent-400/80">{num}</span> })}
             <span>{label}</span>
             <span class="h-px flex-1 bg-white/10"></span>
         </div>
@@ -64,58 +64,7 @@ pub fn MainPage(outline: Vec<OutlineChapter>, intro: Vec<Arc<OutlineSection>>) -
 
         <section>
             {group_label("01", format!("{label}s"))}
-            <ol class="list-none border-b border-white/10">
-                {outline
-                    .into_iter()
-                    .map(|entry| {
-                        let chapter = entry.chapter;
-                        let badge = ctx.applies_to(chapter.applies_to);
-                        let count = entry.flat.len();
-                        let href = ctx.href(Some(chapter.slug), None);
-                        view! {
-                            <li class=ROW>
-                                <HoverRule />
-                                <a
-                                    class=cn!(
-                                        FOCUS,
-                                        "grid gap-x-8 gap-y-2 py-6 md:grid-cols-[9rem_minmax(0,1fr)_auto] md:items-baseline md:px-2",
-                                    )
-                                    href=href.clone()
-                                    on:click=ctx.on_link(href)
-                                >
-                                    <span class="flex flex-col gap-1.5">
-                                        <span class="font-mono text-[11px] tracking-[0.25em] text-accent-400/80 uppercase">
-                                            {format!("{label} {}", entry.number)}
-                                        </span>
-                                        {badge.map(|b| view! { <span class=APPLIES>{b}</span> })}
-                                    </span>
-                                    <span class="flex min-w-0 flex-col gap-2">
-                                        <span class="text-xl leading-[1.3] font-light text-white md:text-2xl">
-                                            {chapter.title}
-                                        </span>
-                                        {chapter
-                                            .summary
-                                            .map(|s| {
-                                                view! {
-                                                    <span class="max-w-2xl text-sm leading-[1.6] font-light text-white/55">
-                                                        {s}
-                                                    </span>
-                                                }
-                                            })}
-                                    </span>
-                                    <span class="inline-flex items-center gap-3 font-mono text-[11px] text-white/40">
-                                        {if count == 1 { "1 topic".to_string() } else { format!("{count} topics") }}
-                                        <Icon
-                                            icon=icons::ARROW_RIGHT
-                                            class="h-4 w-4 text-white/60 transition-transform group-hover:translate-x-1 group-hover:text-accent-300"
-                                        />
-                                    </span>
-                                </a>
-                            </li>
-                        }
-                    })
-                    .collect_view()}
-            </ol>
+            {chapter_rows(outline.into_iter().filter(|entry| entry.parent.is_none()).collect())}
         </section>
 
         {(!intro.is_empty())
@@ -135,6 +84,71 @@ pub fn MainPage(outline: Vec<OutlineChapter>, intro: Vec<Arc<OutlineSection>>) -
     }
 }
 
+/// Hairline rows linking to chapters, or to one chapter's parts.
+fn chapter_rows(entries: Vec<OutlineChapter>) -> impl IntoView {
+    let ctx = use_manual();
+    let label = ctx.chapter_label;
+    view! {
+        <ol class="list-none border-b border-white/10">
+            {entries
+                .into_iter()
+                .map(|entry| {
+                    let chapter = entry.chapter;
+                    let badge = ctx.applies_to(chapter.applies_to);
+                    let meta = match (entry.parts.len(), entry.flat.len()) {
+                        (1, _) => "1 part".to_string(),
+                        (0, 1) => "1 topic".to_string(),
+                        (0, topics) => format!("{topics} topics"),
+                        (parts, _) => format!("{parts} parts"),
+                    };
+                    let href = ctx.href(Some(chapter.slug), None);
+                    view! {
+                        <li class=ROW>
+                            <HoverRule />
+                            <a
+                                class=cn!(
+                                    FOCUS,
+                                    "grid gap-x-8 gap-y-2 py-6 md:grid-cols-[9rem_minmax(0,1fr)_auto] md:items-baseline md:px-2",
+                                )
+                                href=href.clone()
+                                on:click=ctx.on_link(href)
+                            >
+                                <span class="flex flex-col gap-1.5">
+                                    <span class="font-mono text-[11px] tracking-[0.25em] text-accent-400/80 uppercase">
+                                        {format!("{label} {}", entry.number)}
+                                    </span>
+                                    {badge.map(|b| view! { <span class=APPLIES>{b}</span> })}
+                                </span>
+                                <span class="flex min-w-0 flex-col gap-2">
+                                    <span class="text-xl leading-[1.3] font-light text-white md:text-2xl">
+                                        {chapter.title}
+                                    </span>
+                                    {chapter
+                                        .summary
+                                        .map(|s| {
+                                            view! {
+                                                <span class="max-w-2xl text-sm leading-[1.6] font-light text-white/55">
+                                                    {s}
+                                                </span>
+                                            }
+                                        })}
+                                </span>
+                                <span class="inline-flex items-center gap-3 font-mono text-[11px] whitespace-nowrap text-white/40">
+                                    {meta}
+                                    <Icon
+                                        icon=icons::ARROW_RIGHT
+                                        class="h-4 w-4 text-white/60 transition-transform group-hover:translate-x-1 group-hover:text-accent-300"
+                                    />
+                                </span>
+                            </a>
+                        </li>
+                    }
+                })
+                .collect_view()}
+        </ol>
+    }
+}
+
 #[component]
 pub fn ChapterPage(outline: Vec<OutlineChapter>, entry: OutlineChapter) -> impl IntoView {
     let ctx = use_manual();
@@ -147,12 +161,21 @@ pub fn ChapterPage(outline: Vec<OutlineChapter>, entry: OutlineChapter) -> impl 
         .and_then(|i| outline.get(i));
     let next = position.and_then(|i| outline.get(i + 1));
     let badge = ctx.applies_to(entry.chapter.applies_to);
-    let home = ctx.href(None, None);
     let slug = entry.chapter.slug;
+    // A part's eyebrow leads back to its chapter; a chapter's to the manual.
+    let (up_href, up_label) = match entry.parent.and_then(|p| outline.get(p)) {
+        Some(parent) => (ctx.href(Some(parent.chapter.slug), None), parent.label()),
+        None => (ctx.href(None, None), ctx.manual.title.to_string()),
+    };
+    let parts: Vec<OutlineChapter> = entry
+        .parts
+        .iter()
+        .filter_map(|&i| outline.get(i).cloned())
+        .collect();
 
     let pager_link = |target: &OutlineChapter, forward: bool| {
         let href = ctx.href(Some(target.chapter.slug), None);
-        let title = format!("{}. {}", target.number, target.chapter.title);
+        let title = target.label();
         view! {
             <a
                 class=cn!(
@@ -206,10 +229,10 @@ pub fn ChapterPage(outline: Vec<OutlineChapter>, entry: OutlineChapter) -> impl 
                 <span class="text-white/25">"/"</span>
                 <a
                     class=cn!("transition-colors hover:text-white", FOCUS)
-                    href=home.clone()
-                    on:click=ctx.on_link(home)
+                    href=up_href.clone()
+                    on:click=ctx.on_link(up_href)
                 >
-                    {ctx.manual.title}
+                    {up_label}
                 </a>
                 {badge
                     .map(|b| {
@@ -223,9 +246,7 @@ pub fn ChapterPage(outline: Vec<OutlineChapter>, entry: OutlineChapter) -> impl 
             {entry.chapter.summary.map(|s| view! { <p class=LEDE>{s}</p> })}
         </header>
 
-        {entry
-            .sections
-            .is_empty()
+        {(entry.sections.is_empty() && parts.is_empty())
             .then(|| {
                 view! {
                     <p class="border-t border-white/10 pt-6 font-mono text-[11px] text-white/35">
@@ -239,6 +260,16 @@ pub fn ChapterPage(outline: Vec<OutlineChapter>, entry: OutlineChapter) -> impl 
             .cloned()
             .map(|node| view! { <Section chapter_slug=Some(slug) node=node heading_level=2 /> })
             .collect_view()}
+
+        {(!parts.is_empty())
+            .then(|| {
+                view! {
+                    <section>
+                        {group_label("", "Parts".to_string())}
+                        {chapter_rows(parts)}
+                    </section>
+                }
+            })}
 
         {pager}
     }
@@ -414,19 +445,46 @@ fn CopyLink(
     }
 }
 
-/// A chapter the URL names that doesn't apply to the aircraft picked.
+/// A chapter the URL names that doesn't apply to the aircraft picked. Offers
+/// it on the aircraft it does apply to.
 #[component]
 pub fn ChapterUnavailable(chapter: &'static ManualChapter) -> impl IntoView {
     let ctx = use_manual();
     let aircraft = ctx.aircraft.get_untracked().unwrap_or_default();
-    view! {
-        <NotFoundPanel
-            title=chapter.title.to_string()
-            lede=format!(
-                "This doesn't apply to the {aircraft}. Pick another aircraft at the top of the page, or go back to the overview.",
-            )
-        />
-    }
+    let others = ctx.shown_on(chapter.slug, None);
+    let lede = if others.is_empty() {
+        format!(
+            "This doesn't apply to the {aircraft}. Pick another aircraft at the top of the page, or go back to the overview."
+        )
+    } else {
+        format!(
+            "This doesn't apply to the {aircraft}. Read it for an aircraft it applies to, or go back to the overview."
+        )
+    };
+    let links = others
+        .into_iter()
+        .map(|other| {
+            let href = ctx.href_on(other, Some(chapter.slug), None);
+            view! {
+                <a
+                    class=cn!(
+                        "group inline-flex items-center gap-2 text-lg font-medium text-white transition-colors hover:text-accent-300",
+                        FOCUS,
+                    )
+                    href=href.clone()
+                    on:click=ctx.on_link(href)
+                >
+                    {format!("Show it for the {other}")}
+                    <Icon
+                        icon=icons::ARROW_RIGHT
+                        class="h-4 w-4 transition-transform group-hover:translate-x-1"
+                    />
+                </a>
+            }
+            .into_any()
+        })
+        .collect::<Vec<_>>();
+    view! { <NotFoundPanel title=chapter.title.to_string() lede=lede links=links /> }
 }
 
 #[component]
@@ -441,28 +499,39 @@ pub fn ChapterNotFound() -> impl IntoView {
 }
 
 #[component]
-fn NotFoundPanel(title: String, lede: String) -> impl IntoView {
+fn NotFoundPanel(
+    title: String,
+    lede: String,
+    /// Ways forward, shown before the link back to the overview.
+    #[prop(optional)]
+    links: Vec<AnyView>,
+) -> impl IntoView {
     let ctx = use_manual();
     let home = ctx.href(None, None);
+    let quiet = !links.is_empty();
     view! {
         <div class="max-w-4xl py-12 md:py-20">
             <p class=cn!(META, EYEBROW)>{ctx.manual.title}</p>
             <h1 class=TITLE>{title}</h1>
             <p class=LEDE>{lede}</p>
-            <a
-                class=cn!(
-                    "group mt-10 inline-flex items-center gap-2 text-lg font-medium text-white transition-colors hover:text-accent-300",
-                    FOCUS,
-                )
-                href=home.clone()
-                on:click=ctx.on_link(home)
-            >
-                <Icon
-                    icon=icons::ARROW_LEFT
-                    class="h-4 w-4 transition-transform group-hover:-translate-x-1"
-                />
-                "Back to the overview"
-            </a>
+            <div class="mt-10 flex flex-wrap items-center gap-x-10 gap-y-4">
+                {links}
+                <a
+                    class=cn!(
+                        "group inline-flex items-center gap-2 font-medium transition-colors hover:text-accent-300",
+                        if quiet { "text-base text-white/60" } else { "text-lg text-white" },
+                        FOCUS,
+                    )
+                    href=home.clone()
+                    on:click=ctx.on_link(home)
+                >
+                    <Icon
+                        icon=icons::ARROW_LEFT
+                        class="h-4 w-4 transition-transform group-hover:-translate-x-1"
+                    />
+                    "Back to the overview"
+                </a>
+            </div>
         </div>
     }
 }

@@ -85,12 +85,17 @@ fn section_list(
                                 on:click=ctx.on_link(href)
                                 aria-current=move || is_active.get().then_some("location")
                             >
-                                <span class=move || {
-                                    cn!(
-                                        "min-w-8 shrink-0 font-mono text-[10px] tabular-nums",
-                                        if is_active.get() { "text-accent-400" } else { "text-white/30" },
-                                    )
-                                }>{node.number.clone()}</span>
+                                {(!node.number.is_empty())
+                                    .then(|| {
+                                        view! {
+                                            <span class=move || {
+                                                cn!(
+                                                    "min-w-8 shrink-0 font-mono text-[10px] tabular-nums",
+                                                    if is_active.get() { "text-accent-400" } else { "text-white/30" },
+                                                )
+                                            }>{node.number.clone()}</span>
+                                        }
+                                    })}
                                 <span class="min-w-0">{node.section.title}</span>
                             </a>
                             {(!node.children.is_empty())

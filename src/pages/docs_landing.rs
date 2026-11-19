@@ -2,7 +2,7 @@ use infinity_ui::prelude::*;
 
 use crate::auth::use_auth;
 use crate::components::{EYEBROW, HoverRule, SectionLabel};
-use crate::manual::links::{SITE_MANUALS, manual_path};
+use crate::manual::links::{MANUAL_BASE_PATH, SITE_MANUALS};
 use crate::nav;
 
 const REPO_URL: &str = "https://github.com/infinity-MSFS/infinity-rs";
@@ -24,12 +24,22 @@ pub fn DocsLanding() -> impl IntoView {
                         <span class="font-semibold text-accent-300">"Documentation."</span>
                     </h1>
                     <p class="mt-8 max-w-xl border-l border-accent-400/40 pl-5 text-base leading-relaxed font-light text-white/65 md:text-lg">
-                        "Two parallel surfaces — aircraft technical references for pilots, and developer documentation for the people building gauges, systems, and tools against our Rust toolkit."
+                        "Flight manuals and technical references for pilots, and developer documentation for the people building gauges, systems, and tools against our Rust toolkit."
                     </p>
                 </header>
 
                 <SectionLabel num="01" label="Pick a destination" />
                 <div class="border-b border-white/10">
+                    // Opens the picker for everyone; the picker says which
+                    // manuals the viewer can read yet.
+                    <DocRow
+                        status="For pilots"
+                        title="Flight Manual"
+                        tagline="Study-level flight manuals for our aircraft: how every system works, the normal and non-normal procedures, limitations, performance and handling."
+                        bullets=SITE_MANUALS.iter().map(|manual| manual.name.to_string()).collect()
+                        cta="Choose a manual"
+                        on_click=Callback::new(move |()| go.run(MANUAL_BASE_PATH.to_string()))
+                    />
                     <DocRow
                         status="Available now"
                         title="Developer Docs"
@@ -82,41 +92,6 @@ pub fn DocsLanding() -> impl IntoView {
                                 .into_any()
                         }
                     }}
-                    // Web flight manuals are drafts, so unlike the ATA row
-                    // there is no "coming soon" teaser: the row doesn't exist
-                    // for anyone without the developer role.
-                    <Show when=move || staff.get()>
-                        {SITE_MANUALS
-                            .iter()
-                            .map(|manual| {
-                                let aircraft = manual
-                                    .products
-                                    .iter()
-                                    .map(|p| p.aircraft)
-                                    .collect::<Vec<_>>()
-                                    .join(" / ");
-                                let path = manual_path(manual.id);
-                                view! {
-                                    <DocRow
-                                        status="Developer preview"
-                                        dev=true
-                                        title="Flight Manual"
-                                        tagline=format!(
-                                            "The {aircraft} flight manual, readable in the browser — systems, limitations and procedures for the whole family.",
-                                        )
-                                        bullets=vec![
-                                            "Limitations, normal, abnormal and emergency procedures"
-                                                .to_string(),
-                                            "Full-text search and deep links to any section".to_string(),
-                                            "Draft — chapters are still being written".to_string(),
-                                        ]
-                                        cta="Open the manual"
-                                        on_click=Callback::new(move |()| go.run(path.clone()))
-                                    />
-                                }
-                            })
-                            .collect_view()}
-                    </Show>
                 </div>
 
                 <footer class="mt-10 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 font-mono text-[11px] text-white/35">

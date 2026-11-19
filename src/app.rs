@@ -86,6 +86,7 @@ fn Chrome() -> impl IntoView {
                            <Route path=path!("/legal/eula/:slug") view=pages::EulaPage />
                            <Route path=path!("/ata") view=pages::AtaDocuments />
                            <Route path=path!("/ata/:chapter") view=pages::AtaDocuments />
+                           <Route path=path!("/manual") view=crate::manual::ManualIndex />
                            // One route with an optional chapter, so moving between the
                            // overview and a chapter doesn't remount the reader.
                            <Route path=path!("/manual/:manual/:chapter?") view=crate::manual::ManualPage />

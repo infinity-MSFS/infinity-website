@@ -1,7 +1,7 @@
 use infinity_ui::prelude::*;
 
 use super::model::{Inline, parse_inline};
-use super::shared::{APPLIES, FOCUS, OCTAGON_ALERT, use_manual};
+use super::shared::{APPLIES, FOCUS, IMAGE, OCTAGON_ALERT, use_manual};
 use super::types::{BlockBody, CalloutTone, ManualBlock};
 use crate::components::EYEBROW;
 
@@ -58,9 +58,24 @@ fn content_link(label: &str, target: &str) -> AnyView {
         .into_any();
     }
     let href = resolved.href;
+    let other = resolved.aircraft;
     view! {
-        <a class=cn!(LINK, FOCUS) href=href.clone() on:click=ctx.on_link(href)>
+        <a
+            class=cn!(LINK, FOCUS)
+            href=href.clone()
+            on:click=ctx.on_link(href)
+            title=other.map(|a| format!("Opens on the {a}"))
+        >
             {inline(label)}
+            // Inline-block, so the link's underline doesn't run through it.
+            {other
+                .map(|a| {
+                    view! {
+                        <span class="ml-1.5 inline-block font-mono text-[0.625rem] tracking-[0.18em] text-sky-300/80 uppercase">
+                            {a}
+                        </span>
+                    }
+                })}
         </a>
     }
     .into_any()
@@ -188,16 +203,37 @@ fn block_view(block: &'static ManualBlock) -> AnyView {
                     {items
                         .iter()
                         .map(|entry| {
+                            // Memory items are boxed and bold, as in the
+                            // printed checklists.
+                            let memory = entry.memory;
                             view! {
-                                <li class="flex items-baseline gap-2 py-[0.3125rem] text-[0.9375rem] leading-normal">
-                                    <span class="font-light text-white/70">{inline(entry.item)}</span>
+                                <li class=cn!(
+                                    "flex items-baseline gap-2 py-[0.3125rem] text-[0.9375rem] leading-normal",
+                                    memory.then_some("-mx-2 my-0.5 border border-red-400/45 bg-red-400/[0.05] px-2"),
+                                )>
+                                    {memory.then(|| view! { <span class="sr-only">"Memory item: "</span> })}
+                                    <span class=if memory {
+                                        "font-semibold text-white"
+                                    } else {
+                                        "font-light text-white/70"
+                                    }>{inline(entry.item)}</span>
                                     <span
                                         class="min-w-6 flex-1 border-b border-dotted border-white/25"
                                         aria-hidden="true"
                                     ></span>
-                                    <span class="text-right font-mono text-[0.8125rem] tracking-[0.08em] text-accent-200">
-                                        {inline(entry.action)}
-                                    </span>
+                                    <span class=cn!(
+                                        "text-right font-mono text-[0.8125rem] tracking-[0.08em] text-accent-200",
+                                        memory.then_some("font-semibold"),
+                                    )>{inline(entry.action)}</span>
+                                    {entry
+                                        .crew
+                                        .map(|crew| {
+                                            view! {
+                                                <span class="min-w-10 shrink-0 text-right font-mono text-[11px] text-white/40">
+                                                    {format!("({crew})")}
+                                                </span>
+                                            }
+                                        })}
                                 </li>
                             }
                         })
@@ -291,11 +327,13 @@ fn block_view(block: &'static ManualBlock) -> AnyView {
             caption,
             width,
             height,
+            placeholder,
         } => {
-            let src = use_manual().resolve_asset(src);
-            view! {
-                <figure>
-                    {title.map(|t| view! { <div class=cn!("mb-3", BLOCK_TITLE)>{t}</div> })}
+            let image = if placeholder {
+                figure_placeholder(src, alt, width.unwrap_or(1600), height.unwrap_or(900))
+            } else {
+                let src = use_manual().resolve_asset(src);
+                view! {
                     <img
                         class="block h-auto w-full rounded-sm border border-white/10 bg-black/30"
                         src=src
@@ -305,6 +343,13 @@ fn block_view(block: &'static ManualBlock) -> AnyView {
                         loading="lazy"
                         decoding="async"
                     />
+                }
+                .into_any()
+            };
+            view! {
+                <figure>
+                    {title.map(|t| view! { <div class=cn!("mb-3", BLOCK_TITLE)>{t}</div> })}
+                    {image}
                     {caption
                         .map(|c| {
                             view! {
@@ -318,6 +363,32 @@ fn block_view(block: &'static ManualBlock) -> AnyView {
                 .into_any()
         }
     }
+}
+
+/// Stands in for an image that hasn't been made: the figure's proportions,
+/// what it should show, and where the file goes.
+fn figure_placeholder(src: &'static str, alt: &'static str, width: u32, height: u32) -> AnyView {
+    view! {
+        <div
+            role="img"
+            aria-label=format!("Image to come: {alt}")
+            class="mx-auto flex w-full flex-col items-center justify-center gap-2 rounded-sm border border-dashed border-white/15 bg-[repeating-linear-gradient(135deg,rgba(255,255,255,0.025)_0_12px,transparent_12px_24px)] p-6 text-center"
+            // The box keeps the figure's proportions but grows to fit its
+            // text on a narrow screen; a tall figure narrows to stay within
+            // 70% of the viewport's height.
+            style=format!(
+                "aspect-ratio: {width} / {height}; max-width: calc(70vh * {width} / {height})"
+            )
+        >
+            <Icon icon=IMAGE class="h-6 w-6 text-accent-400/60" />
+            <span class=EYEBROW>"Image to come"</span>
+            <span class="max-w-xl text-sm leading-[1.6] font-light text-white/55">{alt}</span>
+            <span class="font-mono text-[10px] break-all text-white/30">
+                {format!("{src} · {width} × {height}")}
+            </span>
+        </div>
+    }
+    .into_any()
 }
 
 pub fn block_list(blocks: &[&'static ManualBlock]) -> impl IntoView + use<> {

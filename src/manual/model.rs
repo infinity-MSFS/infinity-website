@@ -20,14 +20,31 @@ pub struct OutlineSection {
     pub children: Vec<Arc<OutlineSection>>,
 }
 
+/// One page of the outline: a chapter, or a part of one.
 #[derive(Clone, Debug, PartialEq)]
 pub struct OutlineChapter {
     pub chapter: &'static ManualChapter,
-    /// Display number, e.g. "3".
+    /// Display number, e.g. "3", or "1.4" for a part.
     pub number: String,
+    /// Where the chapter this is a part of sits in the outline. `None` for a
+    /// top-level chapter.
+    pub parent: Option<usize>,
+    /// Where the parts that apply to the selected aircraft sit in the
+    /// outline, in order.
+    pub parts: Vec<usize>,
+    /// The chapter's own sections. They're unnumbered when it has parts, so
+    /// their numbers can't clash with the parts' ("1.1").
     pub sections: Vec<Arc<OutlineSection>>,
     /// Every section, in reading order.
     pub flat: Vec<Arc<OutlineSection>>,
+}
+
+impl OutlineChapter {
+    /// "3. Limitations" for a chapter, "1.4 Electrical" for a part.
+    pub fn label(&self) -> String {
+        let dot = if self.parent.is_some() { "" } else { "." };
+        format!("{}{dot} {}", self.number, self.chapter.title)
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -71,32 +88,94 @@ pub fn find_aircraft(manual: &Manual, value: Option<&str>) -> Option<AircraftNam
 
 type Slugs = HashMap<*const ManualSection, String>;
 
-/// The chapters and sections that apply to `aircraft` (all of them when it's
-/// `None`), numbered in order. Slugs come from the whole manual, so a link to
-/// a section works whichever aircraft is picked.
+/// Every chapter in the manual, parts included, in reading order.
+pub fn all_chapters(manual: &'static Manual) -> Vec<&'static ManualChapter> {
+    fn visit(chapters: &'static [ManualChapter], all: &mut Vec<&'static ManualChapter>) {
+        for chapter in chapters {
+            all.push(chapter);
+            visit(chapter.parts, all);
+        }
+    }
+    let mut all = Vec::new();
+    visit(manual.chapters, &mut all);
+    all
+}
+
+/// Every page that applies to `aircraft` (all of them when it's `None`),
+/// numbered, in reading order: each chapter followed by its parts. Slugs come
+/// from the whole manual, so a link to a section works whichever aircraft is
+/// picked.
 pub fn build_outline(
     manual: &'static Manual,
     aircraft: Option<AircraftName>,
 ) -> Vec<OutlineChapter> {
-    let groups: Vec<&'static [ManualSection]> =
-        manual.chapters.iter().map(|c| c.sections).collect();
-    let slugs = assign_slugs(&groups);
-    manual
-        .chapters
-        .iter()
-        .filter(|chapter| is_for(aircraft, chapter.applies_to))
-        .enumerate()
-        .map(|(index, chapter)| {
-            let number = (index + 1).to_string();
-            let sections = walk(chapter.sections, &number, 0, aircraft, &slugs);
-            OutlineChapter {
+    fn visit(
+        chapters: &'static [ManualChapter],
+        parent: Option<usize>,
+        aircraft: Option<AircraftName>,
+        slugs: &Slugs,
+        pages: &mut Vec<OutlineChapter>,
+    ) {
+        let shown = chapters
+            .iter()
+            .filter(|chapter| is_for(aircraft, chapter.applies_to));
+        for (index, chapter) in shown.enumerate() {
+            let number = match parent {
+                Some(p) => format!("{}.{}", pages[p].number, index + 1),
+                None => (index + 1).to_string(),
+            };
+            let has_parts = chapter
+                .parts
+                .iter()
+                .any(|part| is_for(aircraft, part.applies_to));
+            let prefix = if has_parts { "" } else { number.as_str() };
+            let sections = walk(chapter.sections, prefix, 0, aircraft, slugs);
+            let at = pages.len();
+            pages.push(OutlineChapter {
                 chapter,
                 number,
+                parent,
+                parts: Vec::new(),
                 flat: flatten(&sections),
                 sections,
+            });
+            if let Some(p) = parent {
+                pages[p].parts.push(at);
             }
-        })
-        .collect()
+            visit(chapter.parts, Some(at), aircraft, slugs, pages);
+        }
+    }
+
+    let groups: Vec<&'static [ManualSection]> =
+        all_chapters(manual).iter().map(|c| c.sections).collect();
+    let slugs = assign_slugs(&groups);
+    let mut pages = Vec::new();
+    visit(manual.chapters, None, aircraft, &slugs, &mut pages);
+    pages
+}
+
+/// The aircraft that show each page (keyed by its slug) and each section
+/// (keyed `page#section`), in the manual's aircraft order.
+pub type Visibility = HashMap<String, Vec<AircraftName>>;
+
+pub fn build_visibility(manual: &'static Manual) -> Visibility {
+    let mut visibility = Visibility::new();
+    for &aircraft in manual.aircraft {
+        for page in build_outline(manual, Some(aircraft)) {
+            let slug = page.chapter.slug;
+            visibility
+                .entry(slug.to_string())
+                .or_default()
+                .push(aircraft);
+            for node in &page.flat {
+                visibility
+                    .entry(format!("{slug}#{}", node.slug))
+                    .or_default()
+                    .push(aircraft);
+            }
+        }
+    }
+    visibility
 }
 
 /// The main page's introduction sections that apply to `aircraft`.
@@ -321,35 +400,54 @@ fn has_scheme(target: &str) -> bool {
 pub struct ResolvedLink {
     pub href: String,
     pub external: bool,
+    /// Set when the target doesn't apply to the aircraft shown: the link
+    /// opens it on this aircraft instead, the first that has it.
+    pub aircraft: Option<AircraftName>,
 }
 
 /// Resolves a link target written in content. `#section` stays in the current
 /// chapter, `chapter` or `chapter#section` points elsewhere in the manual, a
 /// leading `/` is a path on the host site, and anything with a scheme
-/// (`https:`, `mailto:`) is external.
+/// (`https:`, `mailto:`) is external. Given `visibility`, a target that
+/// doesn't apply to `aircraft` opens on the first aircraft that has it.
 pub fn resolve_link(
     target: &str,
     base_path: &str,
     chapter_slug: Option<&str>,
     aircraft: Option<AircraftName>,
+    visibility: Option<&Visibility>,
 ) -> ResolvedLink {
     if has_scheme(target) || target.starts_with("//") {
         return ResolvedLink {
             href: target.to_string(),
             external: true,
+            aircraft: None,
         };
     }
     if target.starts_with('/') {
         return ResolvedLink {
             href: target.to_string(),
             external: false,
+            aircraft: None,
         };
     }
     let mut parts = target.split('#');
     let chapter = parts.next().filter(|c| !c.is_empty()).or(chapter_slug);
+    let section = parts.next().filter(|s| !s.is_empty());
+    let other = match (visibility, chapter, aircraft) {
+        (Some(visibility), Some(page), Some(aircraft)) => {
+            let key = section.map_or_else(|| page.to_string(), |s| format!("{page}#{s}"));
+            visibility
+                .get(&key)
+                .filter(|names| !names.contains(&aircraft))
+                .and_then(|names| names.first().copied())
+        }
+        _ => None,
+    };
     ResolvedLink {
-        href: manual_href(base_path, chapter, parts.next(), aircraft),
+        href: manual_href(base_path, chapter, section, other.or(aircraft)),
         external: false,
+        aircraft: other,
     }
 }
 
@@ -505,6 +603,8 @@ pub struct ChapterRef {
     pub slug: &'static str,
     pub number: String,
     pub title: &'static str,
+    /// "3. Limitations", or "1.4 Electrical" for a part.
+    pub label: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -547,6 +647,7 @@ pub fn build_search_index(
             slug: entry.chapter.slug,
             number: entry.number.clone(),
             title: entry.chapter.title,
+            label: entry.label(),
         };
         let summary = entry.chapter.summary.unwrap_or_default();
         entries.push(SearchEntry {

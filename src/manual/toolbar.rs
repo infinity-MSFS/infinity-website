@@ -212,12 +212,41 @@ fn ChapterMenu(
         }
     };
 
+    // A manual with parts has a long menu: open it on the current page.
+    Effect::watch(
+        move || open.get(),
+        move |open, _, _| {
+            if !*open {
+                return;
+            }
+            request_animation_frame(move || {
+                let Some(list) = list.get_untracked() else {
+                    return;
+                };
+                let Some(item) = links_in(Some(&list))
+                    .into_iter()
+                    .find(|a| a.has_attribute("aria-current"))
+                else {
+                    return;
+                };
+                let outer = list.get_bounding_client_rect();
+                let inner = item.get_bounding_client_rect();
+                if inner.top() < outer.top() || inner.bottom() > outer.bottom() {
+                    let shift = inner.top() - outer.top() - (outer.height() - inner.height()) / 2.0;
+                    list.set_scroll_top(list.scroll_top() + shift as i32);
+                }
+            });
+        },
+        false,
+    );
+
     let items = move || {
         let overview = (
             String::new(),
             "Overview".to_string(),
             ctx.href(None, None),
             on_main_page.get(),
+            false,
         );
         let current_slug = current.with(|c| c.as_ref().map(|c| c.chapter.slug));
         let chapters = outline.with(|outline| {
@@ -229,6 +258,7 @@ fn ChapterMenu(
                         entry.chapter.title.to_string(),
                         ctx.href(Some(entry.chapter.slug), None),
                         current_slug == Some(entry.chapter.slug),
+                        entry.parent.is_some(),
                     )
                 })
                 .collect::<Vec<_>>()
@@ -292,12 +322,17 @@ fn ChapterMenu(
                         {move || {
                             items()
                                 .into_iter()
-                                .map(|(number, title, href, is_current)| {
+                                .map(|(number, title, href, is_current, is_part)| {
                                     view! {
                                         <li>
                                             <a
                                                 class=cn!(
-                                                    "flex items-baseline gap-3 border-l px-4 py-2 text-sm transition-colors duration-150",
+                                                    "flex items-baseline gap-3 border-l pr-4 transition-colors duration-150",
+                                                    if is_part {
+                                                        "py-1.5 pl-8 text-[0.8125rem]"
+                                                    } else {
+                                                        "py-2 pl-4 text-sm"
+                                                    },
                                                     FOCUS,
                                                     if is_current {
                                                         "border-accent-400 text-white"
@@ -310,7 +345,8 @@ fn ChapterMenu(
                                                 aria-current=is_current.then_some("page")
                                             >
                                                 <span class=cn!(
-                                                    "min-w-5 shrink-0 font-mono text-[10px] tabular-nums",
+                                                    "shrink-0 font-mono text-[10px] tabular-nums",
+                                                    if is_part { "min-w-7" } else { "min-w-5" },
                                                     if is_current { "text-accent-400" } else { "text-white/30" },
                                                 )>{number}</span>
                                                 <span class="min-w-0 flex-1 truncate">{title}</span>
@@ -505,7 +541,7 @@ fn SearchResults(
                             let section_slug = entry.section.as_ref().map(|s| s.slug.clone());
                             let path = match (&entry.chapter, &entry.section) {
                                 (None, _) => "Overview".to_string(),
-                                (Some(c), Some(_)) => format!("{}. {}", c.number, c.title),
+                                (Some(c), Some(_)) => c.label.clone(),
                                 (Some(c), None) => format!("{} {}", ctx.chapter_label, c.number),
                             };
                             let title = match entry.section.as_ref().filter(|s| !s.number.is_empty()) {

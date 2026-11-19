@@ -13,6 +13,11 @@
 /index.html
   Cache-Control: no-cache
 
+# Manual content keeps its file name across deploys, so browsers must check
+# for a new version each time (a cheap 304 when nothing changed).
+/manual-data/*
+  Cache-Control: no-cache
+
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

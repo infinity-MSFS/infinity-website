@@ -15,8 +15,8 @@ use super::dom::{
     scroll_to_offset, smooth_scroll,
 };
 use super::model::{
-    build_intro, build_outline, build_search_index, find_aircraft, find_problems, search_manual,
-    search_terms, slugify,
+    all_chapters, build_intro, build_outline, build_search_index, build_visibility, find_aircraft,
+    find_problems, search_manual, search_terms, slugify,
 };
 use super::pages::{ChapterNotFound, ChapterPage, ChapterUnavailable, MainPage};
 use super::shared::{ManualContext, Panel, contains, use_dismiss};
@@ -162,6 +162,9 @@ pub fn ManualReader(
     });
     let outline = Memo::new(move |_| build_outline(manual, aircraft.get()));
     let intro = Memo::new(move |_| build_intro(manual, aircraft.get()));
+    // Which aircraft show each page and section, so a link to content the
+    // shown aircraft doesn't have can open it on one that does.
+    let visibility = StoredValue::new(build_visibility(manual));
     let index =
         Memo::new(move |_| outline.with(|o| intro.with(|i| build_search_index(o, &i.flat))));
     let terms = Memo::new(move |_| query.with(|q| search_terms(q)));
@@ -347,6 +350,23 @@ pub fn ManualReader(
             // Close any open menu or panel.
             panel.set(None);
 
+            // A link can open its target on another aircraft. Switch here: the
+            // reader stays mounted across the router's navigation, so it
+            // wouldn't notice the new query by itself.
+            let switch_to =
+                find_aircraft(manual, url.search_params().get(AIRCRAFT_PARAM).as_deref())
+                    .filter(|next| aircraft.get_untracked() != Some(*next));
+            if let Some(next) = switch_to
+                && url.pathname() == here.pathname().unwrap_or_default()
+            {
+                // The same page on another aircraft: land on the section once
+                // the content has switched. An empty slug lands on the top.
+                set_url(&url.href(), true);
+                anchor.set_value(Some(hash_slug(&url.hash())));
+                picked.set(Some(next));
+                return;
+            }
+
             let same_page = url.pathname() == here.pathname().unwrap_or_default()
                 && url.search() == here.search().unwrap_or_default();
             if same_page {
@@ -371,6 +391,11 @@ pub fn ManualReader(
                 navigate.run(path);
             } else {
                 navigate.run(format!("{path}{}", url.hash()));
+            }
+            // After the navigation, so the aircraft lands in the new URL
+            // rather than the one being left.
+            if let Some(next) = switch_to {
+                picked.set(Some(next));
             }
         })
     };
@@ -532,20 +557,21 @@ pub fn ManualReader(
         base_path: StoredValue::new(base_path),
         asset_base: StoredValue::new(asset_base),
         chapter_slug,
+        visibility,
         follow,
     });
 
     // A chapter can exist but not apply to the aircraft picked.
     let hidden = move || {
         let slug = chapter_slug.get()?;
-        manual.chapters.iter().find(|c| c.slug == slug)
+        all_chapters(manual).into_iter().find(|c| c.slug == slug)
     };
     let menu_label = Signal::derive(move || {
         if chapter_slug.with(Option::is_none) {
             return "Overview".to_string();
         }
         if let Some(entry) = current.get() {
-            return format!("{}. {}", entry.number, entry.chapter.title);
+            return entry.label();
         }
         hidden().map_or_else(|| "Not found".to_string(), |c| c.title.to_string())
     });

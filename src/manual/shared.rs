@@ -2,7 +2,7 @@ use infinity_ui::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::MouseEvent;
 
-use super::model::{self, ResolvedLink};
+use super::model::{self, ResolvedLink, Visibility};
 use super::types::{AircraftName, Manual};
 
 /// Opaque, so light text behind a popover doesn't show through.
@@ -26,6 +26,11 @@ pub const OCTAGON_ALERT: IconData = IconData::new(
     r#"<path d="M15.31 2a2 2 0 0 1 1.42.59l4.68 4.68A2 2 0 0 1 22 8.69v6.62a2 2 0 0 1-.59 1.42l-4.68 4.68a2 2 0 0 1-1.42.59H8.69a2 2 0 0 1-1.42-.59l-4.68-4.68A2 2 0 0 1 2 15.31V8.69a2 2 0 0 1 .59-1.42l4.68-4.68A2 2 0 0 1 8.69 2z"/><path d="M12 8v4"/><path d="M12 16h.01"/>"#,
 );
 
+/// Lucide `image`.
+pub const IMAGE: IconData = IconData::new(
+    r#"<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>"#,
+);
+
 /// At most one popover is open at a time.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Panel {
@@ -45,6 +50,9 @@ pub struct ManualContext {
     pub base_path: StoredValue<String>,
     pub asset_base: StoredValue<String>,
     pub chapter_slug: Signal<Option<String>>,
+    /// Which aircraft show each page and section, so a link to content the
+    /// shown aircraft doesn't have can open it on one that does.
+    pub visibility: StoredValue<Visibility>,
     pub follow: Callback<(MouseEvent, String)>,
 }
 
@@ -56,11 +64,32 @@ impl ManualContext {
             .with_value(|base| model::manual_href(base, chapter, section, aircraft))
     }
 
+    /// The same, for another aircraft: following it switches to that aircraft.
+    pub fn href_on(
+        &self,
+        aircraft: AircraftName,
+        chapter: Option<&str>,
+        section: Option<&str>,
+    ) -> String {
+        self.base_path
+            .with_value(|base| model::manual_href(base, chapter, section, Some(aircraft)))
+    }
+
+    /// The aircraft that show a page or a section of it, in the manual's order.
+    pub fn shown_on(&self, chapter: &str, section: Option<&str>) -> Vec<AircraftName> {
+        let key = section.map_or_else(|| chapter.to_string(), |s| format!("{chapter}#{s}"));
+        self.visibility
+            .with_value(|visibility| visibility.get(&key).cloned().unwrap_or_default())
+    }
+
     pub fn resolve_link(&self, target: &str) -> ResolvedLink {
         let aircraft = self.aircraft.get();
         let chapter = self.chapter_slug.get();
-        self.base_path
-            .with_value(|base| model::resolve_link(target, base, chapter.as_deref(), aircraft))
+        self.base_path.with_value(|base| {
+            self.visibility.with_value(|visibility| {
+                model::resolve_link(target, base, chapter.as_deref(), aircraft, Some(visibility))
+            })
+        })
     }
 
     pub fn resolve_asset(&self, src: &str) -> String {

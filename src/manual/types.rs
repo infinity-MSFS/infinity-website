@@ -1,8 +1,6 @@
-//! Content model for web manuals. Plain `const` data, so a manual compiles
-//! into the binary and the reader never fetches or parses anything.
-
-// The draft manual doesn't use every block type and builder yet.
-#![allow(dead_code)]
+//! Content model for web manuals. `load` builds it from a manual's JSON once
+//! per visit and keeps it for good, so everything here borrows `'static`
+//! data and the reader can pass it around freely.
 
 /// An aircraft name exactly as it appears in [`Manual::aircraft`], e.g. "DC-10".
 pub type AircraftName = &'static str;
@@ -20,6 +18,10 @@ pub struct ChecklistItem {
     pub item: &'static str,
     /// Its required state, e.g. "SET".
     pub action: &'static str,
+    /// Who does it, e.g. "FE", "P" or "PM". Shown after the action.
+    pub crew: Option<&'static str>,
+    /// A memory item: done without the checklist, so it's boxed and bold.
+    pub memory: bool,
 }
 
 /// What a block shows. Text, callouts, list items, table cells, checklist rows
@@ -59,6 +61,10 @@ pub enum BlockBody {
         caption: Option<&'static str>,
         width: Option<u32>,
         height: Option<u32>,
+        /// The image isn't made yet. Shows a box of the figure's proportions
+        /// with `alt` (what the image should show) and `src` (where to put
+        /// it), instead of loading `src`.
+        placeholder: bool,
     },
 }
 
@@ -68,74 +74,6 @@ pub struct ManualBlock {
     /// applies to every aircraft the manual covers.
     pub applies_to: &'static [AircraftName],
     pub body: BlockBody,
-}
-
-impl ManualBlock {
-    pub const fn text(content: &'static str) -> Self {
-        Self::new(BlockBody::Text(content))
-    }
-
-    pub const fn callout(tone: CalloutTone, content: &'static str) -> Self {
-        Self::new(BlockBody::Callout {
-            tone,
-            title: None,
-            content,
-        })
-    }
-
-    pub const fn list(items: &'static [&'static str]) -> Self {
-        Self::new(BlockBody::List {
-            ordered: false,
-            items,
-        })
-    }
-
-    pub const fn steps(items: &'static [&'static str]) -> Self {
-        Self::new(BlockBody::List {
-            ordered: true,
-            items,
-        })
-    }
-
-    pub const fn checklist(items: &'static [ChecklistItem]) -> Self {
-        Self::new(BlockBody::Checklist { title: None, items })
-    }
-
-    pub const fn table(
-        columns: &'static [&'static str],
-        rows: &'static [&'static [&'static str]],
-    ) -> Self {
-        Self::new(BlockBody::Table {
-            title: None,
-            columns,
-            rows,
-            dense: false,
-        })
-    }
-
-    pub const fn new(body: BlockBody) -> Self {
-        Self {
-            applies_to: &[],
-            body,
-        }
-    }
-
-    /// Sets the title of a callout, checklist, table or figure.
-    pub const fn titled(mut self, heading: &'static str) -> Self {
-        match &mut self.body {
-            BlockBody::Callout { title, .. }
-            | BlockBody::Checklist { title, .. }
-            | BlockBody::Table { title, .. }
-            | BlockBody::Figure { title, .. } => *title = Some(heading),
-            BlockBody::Text(_) | BlockBody::List { .. } => {}
-        }
-        self
-    }
-
-    pub const fn only(mut self, aircraft: &'static [AircraftName]) -> Self {
-        self.applies_to = aircraft;
-        self
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -151,81 +89,21 @@ pub struct ManualSection {
     pub children: &'static [ManualSection],
 }
 
-impl ManualSection {
-    pub const fn new(title: &'static str) -> Self {
-        Self {
-            slug: None,
-            title,
-            summary: None,
-            applies_to: &[],
-            blocks: &[],
-            children: &[],
-        }
-    }
-
-    /// A section with a pinned slug.
-    pub const fn at(slug: &'static str, title: &'static str) -> Self {
-        let mut section = Self::new(title);
-        section.slug = Some(slug);
-        section
-    }
-
-    pub const fn summary(mut self, summary: &'static str) -> Self {
-        self.summary = Some(summary);
-        self
-    }
-
-    pub const fn only(mut self, aircraft: &'static [AircraftName]) -> Self {
-        self.applies_to = aircraft;
-        self
-    }
-
-    pub const fn blocks(mut self, blocks: &'static [ManualBlock]) -> Self {
-        self.blocks = blocks;
-        self
-    }
-
-    pub const fn children(mut self, children: &'static [ManualSection]) -> Self {
-        self.children = children;
-        self
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ManualChapter {
-    /// URL segment, e.g. "normal-procedures". Unique within the manual.
+    /// URL segment, e.g. "normal-procedures". Unique within the manual,
+    /// parts included.
     pub slug: &'static str,
     pub title: &'static str,
     pub summary: Option<&'static str>,
     pub applies_to: &'static [AircraftName],
+    /// The chapter's own topics, shown above its parts.
     pub sections: &'static [ManualSection],
-}
-
-impl ManualChapter {
-    pub const fn new(slug: &'static str, title: &'static str) -> Self {
-        Self {
-            slug,
-            title,
-            summary: None,
-            applies_to: &[],
-            sections: &[],
-        }
-    }
-
-    pub const fn summary(mut self, summary: &'static str) -> Self {
-        self.summary = Some(summary);
-        self
-    }
-
-    pub const fn only(mut self, aircraft: &'static [AircraftName]) -> Self {
-        self.applies_to = aircraft;
-        self
-    }
-
-    pub const fn sections(mut self, sections: &'static [ManualSection]) -> Self {
-        self.sections = sections;
-        self
-    }
+    /// Sub-chapters, each on its own page and numbered under this one: part 4
+    /// of chapter 1 is "1.4". For a long chapter such as a systems
+    /// description, where one page per system reads better than one page for
+    /// them all.
+    pub parts: &'static [ManualChapter],
 }
 
 #[derive(Debug, PartialEq, Eq)]
